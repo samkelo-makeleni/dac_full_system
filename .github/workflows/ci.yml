@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    name: Validate project
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check Supabase Edge Functions
+        run: |
+          deno check --config tsconfig.json \
+            supabase/functions/parse-report/index.ts \
+            supabase/functions/generate-dac/index.ts \
+            supabase/functions/delete-report/index.ts \
+            supabase/functions/delete-dac/index.ts
+
+      - name: Validate required SQL files
+        run: |
+          test -s sql/schema.sql
+          test -s sql/storage_policies.sql
+          test -s sql/schedule_cron.sql
+
+      - name: Validate frontend entrypoint
+        run: |
+          test -s frontend/index.html
+          grep -q "Falcorp DAC Portal" frontend/index.html
+          grep -q "createClient" frontend/index.html
