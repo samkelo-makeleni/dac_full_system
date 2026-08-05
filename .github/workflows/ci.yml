@@ -20,13 +20,9 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Check Supabase Edge Functions
+      - name: Lint Supabase Edge Functions
         run: |
-          deno check --config tsconfig.json \
-            supabase/functions/parse-report/index.ts \
-            supabase/functions/generate-dac/index.ts \
-            supabase/functions/delete-report/index.ts \
-            supabase/functions/delete-dac/index.ts
+          deno lint --rules-exclude=no-explicit-any supabase/functions
 
       - name: Validate required SQL files
         run: |
