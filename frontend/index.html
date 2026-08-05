@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Falcorp DAC Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --teal: #1F6E8C;
+    --grey: #D9D9D9;
+    --bg: #F7F9FA;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: var(--bg); color: #222; }
+  header { background: var(--teal); color: white; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 1.1rem; margin: 0; }
+  main { max-width: 780px; margin: 2rem auto; padding: 0 1rem; }
+  .card { background: white; border: 1px solid var(--grey); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  label { display: block; font-weight: 600; margin-bottom: 0.3rem; margin-top: 1rem; }
+  input, select, button { font-size: 1rem; padding: 0.5rem; border-radius: 6px; border: 1px solid #ccc; width: 100%; }
+  button { background: var(--teal); color: white; border: none; margin-top: 1rem; cursor: pointer; width: auto; padding: 0.6rem 1.2rem; }
+  button.secondary { background: #eaf3f6; color: var(--teal); border: 1px solid #b7d3dd; }
+  button.danger { background: #fff1f2; color: #b00020; border: 1px solid #f0b8c0; padding: 0.35rem 0.65rem; margin-top: 0; }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.loading { opacity: 0.75; cursor: wait; }
+  .spinner {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.9rem;
+    margin-right: 0.45rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: -0.15rem;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--grey); font-size: 0.9rem; }
+  .status-ok { color: #1a7a1a; }
+  .status-pending { color: #b8860b; }
+  .status-error { color: #b00020; }
+  .hidden { display: none; }
+  .muted { color: #666; font-size: 0.9rem; }
+  a.download { color: var(--teal); font-weight: 600; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Falcorp DAC Portal — Telkom CSB IT</h1>
+  <div style="display:flex; align-items:center; gap:0.75rem;">
+    <div id="userBadge"></div>
+    <button id="logoutBtn" class="secondary" type="button" style="margin-top:0; padding:0.45rem 0.8rem;">Log out</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- LOGIN VIEW -->
+  <section id="loginView" class="card">
+    <h2>Sign in</h2>
+    <p class="muted">Access is restricted to approved Team Leads and Managers. Contact your Delivery Manager if you need an account.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" placeholder="you@falcorp.co.za" />
+    <label for="password">Password</label>
+    <input id="password" type="password" />
+    <button id="loginBtn">Sign in</button>
+    <button id="showSignUpBtn" class="secondary" type="button">Create Account</button>
+    <button id="forgotPasswordBtn" class="secondary" type="button">Forgot password?</button>
+    <p id="loginError" class="status-error"></p>
+    <p id="authStatus" class="muted"></p>
+
+    <div id="signUpBlock" class="hidden">
+      <hr />
+      <h3>Create account</h3>
+      <label for="signUpName">Full name</label>
+      <input id="signUpName" type="text" placeholder="e.g. Samkelo Makeleni" />
+      <label for="signUpEmail">Email</label>
+      <input id="signUpEmail" type="email" placeholder="you@falcorp.co.za" />
+      <label for="signUpRole">Role</label>
+      <select id="signUpRole">
+        <option value="team_lead">Team Lead</option>
+        <option value="manager">Manager</option>
+      </select>
+      <label for="signUpPassword">Password</label>
+      <input id="signUpPassword" type="password" placeholder="At least 6 characters" />
+      <button id="signUpBtn" type="button">Create account</button>
+      <p id="signUpStatus" class="muted"></p>
+    </div>
+  </section>
+
+  <!-- TEAM LEAD VIEW -->
+  <section id="teamLeadView" class="card hidden">
+    <h2>Upload weekly reports</h2>
+    <label for="personName">Your name (as it should appear on the report)</label>
+    <input id="personName" type="text" placeholder="e.g. Boipelo Motshabi" />
+    <label for="weekStart">Week start (Monday)</label>
+    <input id="weekStart" type="date" />
+    <label for="reportFile">Weekly reports (.docx)</label>
+    <input id="reportFile" type="file" accept=".docx" multiple />
+    <button id="uploadBtn">Upload</button>
+    <p id="uploadStatus" class="muted"></p>
+
+    <h3>Your recent uploads</h3>
+    <table id="myUploadsTable">
+      <thead><tr><th>Month</th><th>Week</th><th>Start</th><th>File</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- MANAGER VIEW -->
+  <section id="managerView" class="card hidden">
+    <h2>All weekly reports</h2>
+    <table id="allUploadsTable">
+      <thead><tr><th>Person</th><th>Month</th><th>Week</th><th>Start</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="managerDacsView" class="card hidden">
+    <h2>Generate Delivery Acceptance Certificate (DAC)</h2>
+    <p class="muted">After all weekly reports for the month show Parsed, generate the monthly DAC and download it here.</p>
+    <label for="manualPeriod">Month</label>
+    <input id="manualPeriod" type="month" />
+    <button id="generateBtn">Generate DAC</button>
+    <p id="generateStatus" class="muted"></p>
+    <p id="generateDownload" class="hidden"></p>
+
+    <h3>Generated DACs</h3>
+    <table id="dacsTable">
+      <thead><tr><th>Period</th><th>Generated</th><th>File</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+</main>
+
+<script>
+  // ---- Supabase project config ----
+  const SUPABASE_URL = "https://lrqvvxxhaxakmhnvrlbn.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_YDEqAubV8Dbpe6K_WlpY8A_chMCK6Ke";
+  const GENERATE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/generate-dac`;
+  const DELETE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-report`;
+  const DELETE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-dac`;
+  // -----------------------------------------
+
+  const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
+  localStorage.removeItem(`sb-${SUPABASE_PROJECT_REF}-auth-token`);
+  sessionStorage.removeItem(`sb-${SUPABASE_PROJECT_REF}-auth-token`);
+
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  const el = (id) => document.getElementById(id);
+
+  let currentProfile = null;
+
+  function setButtonLoading(button, isLoading, loadingText = "Working...") {
+    if (!button) return;
+    if (isLoading) {
+      if (!button.dataset.originalText) {
+        button.dataset.originalText = button.textContent;
+      }
+      button.disabled = true;
+      button.classList.add("loading");
+      button.setAttribute("aria-busy", "true");
+      button.innerHTML = `<span class="spinner" aria-hidden="true"></span>${loadingText}`;
+      return;
+    }
+
+    button.disabled = false;
+    button.classList.remove("loading");
+    button.removeAttribute("aria-busy");
+    button.textContent = button.dataset.originalText || button.textContent;
+    delete button.dataset.originalText;
+  }
+
+  function appendTextCell(row, text) {
+    const cell = document.createElement("td");
+    cell.textContent = text || "";
+    row.appendChild(cell);
+  }
+
+  function appendStatusCell(row, report) {
+    const cell = document.createElement("td");
+    if (report.parse_error) {
+      const span = document.createElement("span");
+      span.className = "status-error";
+      span.textContent = `Error: ${report.parse_error}`;
+      cell.appendChild(span);
+    } else if (report.parsed) {
+      const span = document.createElement("span");
+      span.className = "status-ok";
+      span.textContent = "Parsed ✓";
+      cell.appendChild(span);
+    } else {
+      const span = document.createElement("span");
+      span.className = "status-pending";
+      span.textContent = "Pending…";
+      cell.appendChild(span);
+    }
+    row.appendChild(cell);
+  }
+
+  function monthLabel(dateString) {
+    const date = new Date(`${dateString}T00:00:00`);
+    return date.toLocaleString("en-US", { month: "long", year: "numeric" });
+  }
+
+  function monthWeekLabel(dateString) {
+    const day = Number(dateString.slice(8, 10));
+    const week = Math.floor((day - 1) / 7) + 1;
+    return `Week ${week}`;
+  }
+
+  function appendDeleteCell(row, report) {
+    const cell = document.createElement("td");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "danger";
+    button.textContent = "Delete";
+    button.addEventListener("click", () => deleteReport(report, button));
+    cell.appendChild(button);
+    row.appendChild(cell);
+  }
+
+  async function deleteReport(report, button) {
+    const fileName = report.storage_path?.split("/").pop() || "this report";
+    if (!confirm(`Delete ${fileName}?`)) return;
+    setButtonLoading(button, true, "Deleting...");
+
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) {
+        alert("Your session expired. Please log in again.");
+        return;
+      }
+
+      const res = await fetch(DELETE_REPORT_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ reportId: report.id }),
+      });
+      const json = await res.json();
+
+      if (!json.ok) {
+        alert("Could not delete report: " + (json.error || "Unknown error"));
+        return;
+      }
+
+      await loadMyUploads();
+      if (currentProfile?.role === "manager") {
+        await loadAllUploads();
+      }
+    } finally {
+      setButtonLoading(button, false);
+    }
+  }
+
+  function showGenerateFailures(json, targetEl) {
+    const failures = json.parseFailures || json.pendingReports || [];
+    if (!failures.length) return;
+
+    const list = document.createElement("ul");
+    list.className = "status-error";
+    for (const failure of failures) {
+      const item = document.createElement("li");
+      const parts = [failure.personName, failure.weekStart].filter(Boolean).join(" — ");
+      item.textContent = `${parts || "Weekly report"}: ${failure.error || "still pending"}`;
+      list.appendChild(item);
+    }
+    targetEl.appendChild(list);
+    targetEl.classList.remove("hidden");
+  }
+
+  function renderDacRow(tbody, dac) {
+    const tr = document.createElement("tr");
+    appendTextCell(tr, dac.reporting_period || dac.reportingPeriod || "");
+    appendTextCell(tr, new Date(dac.generated_at || Date.now()).toLocaleString());
+
+    const fileCell = document.createElement("td");
+    if (dac.downloadUrl) {
+      const link = document.createElement("a");
+      link.className = "download";
+      link.href = dac.downloadUrl;
+      link.textContent = "Download";
+      link.target = "_blank";
+      link.rel = "noopener";
+      fileCell.appendChild(link);
+    } else {
+      fileCell.textContent = "—";
+    }
+    tr.appendChild(fileCell);
+    appendDacDeleteCell(tr, dac);
+    tbody.appendChild(tr);
+  }
+
+  function appendDacDeleteCell(row, dac) {
+    const cell = document.createElement("td");
+    if (dac.id) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "danger";
+      button.textContent = "Delete";
+      button.addEventListener("click", () => deleteDac(dac, button));
+      cell.appendChild(button);
+    }
+    row.appendChild(cell);
+  }
+
+  async function deleteDac(dac, button) {
+    const label = dac.reporting_period || dac.reportingPeriod || "this DAC";
+    if (!confirm(`Delete generated DAC for ${label}?`)) return;
+    setButtonLoading(button, true, "Deleting...");
+
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) {
+        alert("Your session expired. Please log in again.");
+        return;
+      }
+
+      const res = await fetch(DELETE_DAC_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ dacId: dac.id }),
+      });
+      const json = await res.json();
+
+      if (!json.ok) {
+        alert("Could not delete generated DAC: " + (json.error || "Unknown error"));
+        return;
+      }
+
+      await loadDacs();
+    } finally {
+      setButtonLoading(button, false);
+    }
+  }
+
+  async function init() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session) {
+      await loadProfileAndRender(session.user.id, session.user.email, session.user.user_metadata || {});
+    } else {
+      showLogin();
+    }
+  }
+
+  function showLogin() {
+    el("loginView").classList.remove("hidden");
+    el("teamLeadView").classList.add("hidden");
+    el("managerView").classList.add("hidden");
+    el("managerDacsView").classList.add("hidden");
+    el("userBadge").textContent = "";
+    currentProfile = null;
+  }
+
+  async function logout(event) {
+    const button = event?.currentTarget;
+    setButtonLoading(button, true, "Logging out...");
+    try {
+      const { error } = await supabaseClient.auth.signOut();
+      if (error) {
+        console.error("Logout failed:", error);
+        return;
+      }
+      showLogin();
+      el("email").value = "";
+      el("password").value = "";
+      el("loginError").textContent = "";
+      el("authStatus").textContent = "Signed out successfully.";
+      el("authStatus").className = "status-ok";
+    } finally {
+      setButtonLoading(button, false);
+    }
+  }
+
+  async function ensureProfileExists(userId, fullName, role, email) {
+    const { data: existingProfile, error: lookupError } = await supabaseClient
+      .from("profiles")
+      .select("full_name, role")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (lookupError && lookupError.code !== "PGRST116") {
+      throw new Error(lookupError.message);
+    }
+
+    if (existingProfile) {
+      return existingProfile;
+    }
+
+    const fallbackName = (fullName || email?.split("@")[0] || "User").trim();
+    const fallbackRole = role && (role === "team_lead" || role === "manager") ? role : "team_lead";
+
+    const { data: createdProfile, error: insertError } = await supabaseClient
+      .from("profiles")
+      .upsert({
+        id: userId,
+        full_name: fallbackName,
+        role: fallbackRole,
+      }, { onConflict: "id" })
+      .select("full_name, role")
+      .single();
+
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+
+    return createdProfile;
+  }
+
+  async function loadProfileAndRender(userId, email, userMeta = {}) {
+    try {
+      const profile = await ensureProfileExists(
+        userId,
+        userMeta.full_name || userMeta.name || null,
+        userMeta.role || null,
+        email
+      );
+
+      currentProfile = { ...profile, id: userId, email };
+      el("userBadge").textContent = `${profile.full_name} (${profile.role})`;
+      el("loginView").classList.add("hidden");
+
+      if (profile.role === "team_lead") {
+        el("teamLeadView").classList.remove("hidden");
+        el("managerDacsView").classList.remove("hidden");
+        el("personName").value = profile.full_name;
+        await loadMyUploads();
+        await loadDacs();
+      } else if (profile.role === "manager") {
+        el("teamLeadView").classList.remove("hidden");
+        el("managerView").classList.remove("hidden");
+        el("managerDacsView").classList.remove("hidden");
+        el("personName").value = profile.full_name;
+        await loadMyUploads();
+        await loadAllUploads();
+        await loadDacs();
+      }
+    } catch (err) {
+      console.error("Profile lookup failed:", err);
+      el("loginError").textContent = "No profile found for this account. Ask your manager to add you or recreate the account.";
+      showLogin();
+    }
+  }
+
+  el("loginBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    el("loginError").textContent = "";
+    el("authStatus").textContent = "";
+    const email = el("email").value.trim();
+    const password = el("password").value;
+    setButtonLoading(button, true, "Signing in...");
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        el("loginError").textContent = error.message;
+        return;
+      }
+      await loadProfileAndRender(data.user.id, data.user.email, data.user.user_metadata || {});
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
+
+  el("showSignUpBtn").addEventListener("click", () => {
+    el("signUpBlock").classList.remove("hidden");
+    el("authStatus").textContent = "";
+    el("loginError").textContent = "";
+  });
+
+  el("signUpBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    el("signUpStatus").textContent = "";
+    const fullName = el("signUpName").value.trim();
+    const email = el("signUpEmail").value.trim();
+    const password = el("signUpPassword").value;
+    const role = el("signUpRole").value;
+
+    if (!fullName || !email || !password) {
+      el("signUpStatus").textContent = "Please fill in your full name, email, and password.";
+      el("signUpStatus").className = "status-error";
+      return;
+    }
+
+    if (password.length < 6) {
+      el("signUpStatus").textContent = "Password must be at least 6 characters.";
+      el("signUpStatus").className = "status-error";
+      return;
+    }
+
+    setButtonLoading(button, true, "Creating...");
+    try {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            role,
+          },
+        },
+      });
+
+      if (error) {
+        el("signUpStatus").textContent = error.message;
+        el("signUpStatus").className = "status-error";
+        return;
+      }
+
+      if (data.user && !data.session) {
+        el("signUpStatus").textContent = "Account created. Check your email to confirm your registration, then sign in.";
+        el("signUpStatus").className = "status-ok";
+        return;
+      }
+
+      el("signUpStatus").textContent = "Account created successfully.";
+      el("signUpStatus").className = "status-ok";
+      await loadProfileAndRender(data.user.id, data.user.email, data.user.user_metadata || {});
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
+
+  el("forgotPasswordBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const email = el("email").value.trim() || el("signUpEmail").value.trim();
+    if (!email) {
+      el("authStatus").textContent = "Enter your email above, then click Forgot password.";
+      el("authStatus").className = "status-error";
+      return;
+    }
+
+    setButtonLoading(button, true, "Sending...");
+    try {
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}${window.location.pathname}`,
+      });
+
+      if (error) {
+        el("authStatus").textContent = error.message;
+        el("authStatus").className = "status-error";
+        return;
+      }
+
+      el("authStatus").textContent = "Password reset email sent. Check your inbox.";
+      el("authStatus").className = "status-ok";
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
+
+  el("uploadBtn")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const personName = el("personName").value.trim();
+    const weekStart = el("weekStart").value;
+    const files = Array.from(el("reportFile").files || []);
+    const statusEl = el("uploadStatus");
+
+    if (!personName || !weekStart || files.length === 0) {
+      statusEl.textContent = "Please fill in your name, week start, and choose at least one file.";
+      statusEl.className = "status-error";
+      return;
+    }
+
+    const invalidFile = files.find((file) => !file.name.toLowerCase().endsWith(".docx"));
+    if (invalidFile) {
+      statusEl.textContent = `Upload failed: ${invalidFile.name} is not a .docx file.`;
+      statusEl.className = "status-error";
+      return;
+    }
+
+    statusEl.textContent = `Uploading 0 of ${files.length}…`;
+    statusEl.className = "muted";
+    setButtonLoading(button, true, "Uploading...");
+
+    try {
+      const year = weekStart.slice(0, 4);
+      const month = weekStart.slice(5, 7);
+      const slug = personName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const safeName = file.name
+          .replace(/\.docx$/i, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "") || "weekly-report";
+        const uniquePart = `${Date.now()}-${i + 1}`;
+        const storagePath = `${year}/${month}/${slug}/${weekStart}-${uniquePart}-${safeName}.docx`;
+
+        statusEl.textContent = `Uploading ${i + 1} of ${files.length}: ${file.name}`;
+
+        const { error: uploadError } = await supabaseClient.storage
+          .from("weekly-reports")
+          .upload(storagePath, file, { upsert: false });
+
+        if (uploadError) {
+          statusEl.textContent = `Upload failed on ${file.name}: ${uploadError.message}`;
+          statusEl.className = "status-error";
+          return;
+        }
+
+        const { error: insertError } = await supabaseClient.from("weekly_reports").insert({
+          uploaded_by: currentProfile.id,
+          person_name: personName,
+          week_start: weekStart,
+          project: "Telkom CSB",
+          storage_path: storagePath,
+        });
+
+        if (insertError) {
+          statusEl.textContent = `Saved ${file.name} but failed to record metadata: ${insertError.message}`;
+          statusEl.className = "status-error";
+          return;
+        }
+      }
+
+      statusEl.textContent = `Uploaded ${files.length} weekly report${files.length === 1 ? "" : "s"}. They will be parsed automatically within a minute.`;
+      statusEl.className = "status-ok";
+      el("reportFile").value = "";
+      await loadMyUploads();
+      if (currentProfile.role === "manager") {
+        await loadAllUploads();
+      }
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
+
+  async function loadMyUploads() {
+    const { data, error } = await supabaseClient
+      .from("weekly_reports")
+      .select("id, week_start, storage_path, parsed, parse_error")
+      .eq("uploaded_by", currentProfile.id)
+      .order("week_start", { ascending: false });
+
+    const tbody = document.querySelector("#myUploadsTable tbody");
+    tbody.innerHTML = "";
+    if (error || !data) return;
+    for (const r of data) {
+      const tr = document.createElement("tr");
+      appendTextCell(tr, monthLabel(r.week_start));
+      appendTextCell(tr, monthWeekLabel(r.week_start));
+      appendTextCell(tr, r.week_start);
+      appendTextCell(tr, r.storage_path.split("/").pop());
+      appendStatusCell(tr, r);
+      appendDeleteCell(tr, r);
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function loadAllUploads() {
+    const { data, error } = await supabaseClient
+      .from("weekly_reports")
+      .select("id, person_name, week_start, storage_path, parsed, parse_error")
+      .order("week_start", { ascending: false });
+
+    const tbody = document.querySelector("#allUploadsTable tbody");
+    tbody.innerHTML = "";
+    if (error || !data) return;
+    for (const r of data) {
+      const tr = document.createElement("tr");
+      appendTextCell(tr, r.person_name);
+      appendTextCell(tr, monthLabel(r.week_start));
+      appendTextCell(tr, monthWeekLabel(r.week_start));
+      appendTextCell(tr, r.week_start);
+      appendStatusCell(tr, r);
+      appendDeleteCell(tr, r);
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function loadDacs() {
+    const { data, error } = await supabaseClient
+      .from("generated_dacs")
+      .select("id, reporting_period, generated_at, storage_path")
+      .order("generated_at", { ascending: false });
+
+    const tbody = document.querySelector("#dacsTable tbody");
+    tbody.innerHTML = "";
+    if (error || !data) return;
+    for (const r of data) {
+      const { data: urlData } = await supabaseClient.storage
+        .from("generated-dacs")
+        .createSignedUrl(r.storage_path, 60 * 60); // 1 hour link
+      renderDacRow(tbody, { ...r, downloadUrl: urlData?.signedUrl });
+    }
+  }
+
+  async function refreshDacsSoon() {
+    await loadDacs();
+    setTimeout(loadDacs, 1500);
+    setTimeout(loadDacs, 4000);
+  }
+
+  el("logoutBtn")?.addEventListener("click", logout);
+
+  el("generateBtn")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const statusEl = el("generateStatus");
+    const downloadEl = el("generateDownload");
+    downloadEl.classList.add("hidden");
+    downloadEl.innerHTML = "";
+
+    const monthVal = el("manualPeriod").value; // "2026-08"
+    if (!monthVal) {
+      statusEl.textContent = "Select the month you want to generate first.";
+      statusEl.className = "status-error";
+      return;
+    }
+
+    statusEl.textContent = "Generating… this can take up to a minute while the DAC document is prepared.";
+    statusEl.className = "muted";
+    setButtonLoading(button, true, "Generating...");
+
+    const body = { periodStart: `${monthVal}-01` };
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+
+    try {
+      const res = await fetch(GENERATE_DAC_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        statusEl.textContent = "Failed: " + (json.error || json.message);
+        statusEl.className = "status-error";
+        showGenerateFailures(json, downloadEl);
+        await loadMyUploads();
+        if (currentProfile.role === "manager") {
+          await loadAllUploads();
+        }
+        return;
+      }
+      statusEl.textContent = json.emailSent
+        ? `Generated DAC for ${json.reportingPeriod} and emailed it to ${json.emailedTo || "the manager"}.`
+        : `Generated DAC for ${json.reportingPeriod}. Email was skipped: ${json.emailSkippedReason || "email is not configured"}.`;
+      statusEl.className = "status-ok";
+      if (json.downloadUrl) {
+        const link = document.createElement("a");
+        link.className = "download";
+        link.href = json.downloadUrl;
+        link.textContent = "Download generated DAC";
+        link.target = "_blank";
+        link.rel = "noopener";
+        downloadEl.appendChild(link);
+        downloadEl.classList.remove("hidden");
+
+        const tbody = document.querySelector("#dacsTable tbody");
+        tbody.innerHTML = "";
+        renderDacRow(tbody, {
+          id: json.dacId,
+          reportingPeriod: json.reportingPeriod,
+          downloadUrl: json.downloadUrl,
+        });
+      }
+      await refreshDacsSoon();
+    } catch (e) {
+      statusEl.textContent = "Request failed. Check that the generate-dac function is deployed and allows browser requests.";
+      statusEl.className = "status-error";
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
+
+  init();
+</script>
+
+</body>
+</html>
