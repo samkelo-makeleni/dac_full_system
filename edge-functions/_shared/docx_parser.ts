@@ -9,7 +9,6 @@
 
 // deno-lint-ignore-file no-explicit-any
 import mammoth from "npm:mammoth@1.7.2";
-import { Buffer } from "node:buffer";
 
 export interface Activity {
   day: string;
@@ -283,7 +282,7 @@ export async function parseWeeklyReportBuffer(
   sourceFile: string,
 ): Promise<ParsedWeeklyReport> {
   const { value: html } = await mammoth.convertToHtml(
-    { buffer: Buffer.from(buffer) },
+    { arrayBuffer: buffer },
     {
       styleMap: [
         "p[style-name='Heading 1'] => h1:fresh",

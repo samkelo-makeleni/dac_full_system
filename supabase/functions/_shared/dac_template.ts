@@ -165,7 +165,7 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
 
   function sigTable() {
     const w1 = 2300, w2 = 2350, w3 = 2350, w4 = 2350;
-    const rows: TableRow[] = [];
+    const rows = [];
     data.signatories.forEach((sig) => {
       rows.push(new TableRow({
         children: [new TableCell({
@@ -185,14 +185,14 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
     return new Table({ width: { size: fullWidth, type: WidthType.DXA }, columnWidths: [w1, w2, w3, w4], rows });
   }
 
-  const sectionRenderers: Record<string, (s: DacSection) => Paragraph[]> = {
+  const sectionRenderers = {
     paragraph: (s) => [h(s.title), para(s.text || "")],
     bulletsPlain: (s) => [h(s.title), ...(s.items || []).map((i: string) => plainBullet(i))],
     bulletsLead: (s) => [h(s.title), ...(s.items || []).map((i: any) => bullet(i.lead, i.text))],
   };
 
   const indexItems = data.sections.map((s) => s.title);
-  const bodyChildren: Paragraph[] = [];
+  const bodyChildren = [];
   data.sections.forEach((s) => {
     const renderer = sectionRenderers[s.type];
     if (!renderer) throw new Error(`Unknown section type: ${s.type}`);
