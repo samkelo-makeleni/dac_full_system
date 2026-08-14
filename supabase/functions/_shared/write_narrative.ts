@@ -23,6 +23,7 @@ export interface DacSection {
 
 const OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_MODEL = "gpt-5";
+const OPENAI_NARRATIVE_REQUIRED = "OPENAI_NARRATIVE_REQUIRED";
 
 const REQUIRED_SECTION_TITLES = [
   "Monthly Synopsis of Achievements",
@@ -91,6 +92,155 @@ function sourceStats(peopleData: PersonMonth[]) {
   return { peopleCount: peopleData.length, weekCount, activityCount, supportingCount };
 }
 
+function unique(values: string[]) {
+  return Array.from(new Set(values.map(clean).filter(Boolean)));
+}
+
+function rowText(row: string[]) {
+  return clean(row.join(" - "));
+}
+
+function noFormalItems(section: string, reportingPeriod: string): DacSection {
+  return {
+    title: section,
+    type: "paragraph",
+    text: `No formal ${section.toLowerCase()} items were logged in the parsed weekly reports for ${reportingPeriod}.`,
+  };
+}
+
+function buildFallbackNarrative(reportingPeriod: string, peopleData: PersonMonth[]): DacSection[] {
+  const stats = sourceStats(peopleData);
+  const contributors = unique(peopleData.map((person) => person.name));
+  const weekStarts = unique(peopleData.flatMap((person) => person.weeks.map((week) => week.weekStart))).sort();
+  const activities = peopleData.flatMap((person) =>
+    person.weeks.flatMap((week) =>
+      (week.activities ?? []).map((activity) => ({
+        person: clean(person.name),
+        weekStart: clean(week.weekStart),
+        project: clean(activity.project),
+        work: clean(activity.work || activity.notes),
+      }))
+    )
+  ).filter((activity) => activity.project || activity.work);
+  const projects = unique(activities.map((activity) => activity.project || "General delivery"));
+
+  function activityItemsByPerson() {
+    return peopleData.flatMap((person) => {
+      const personName = clean(person.name) || "Unnamed contributor";
+      const personActivities = person.weeks.flatMap((week) =>
+        (week.activities ?? []).map((activity) => ({
+          weekStart: clean(week.weekStart),
+          project: clean(activity.project) || "General delivery",
+          work: clean(activity.work || activity.notes),
+        }))
+      ).filter((activity) => activity.project || activity.work);
+
+      if (personActivities.length === 0) {
+        return [{
+          lead: personName,
+          text: `No project activity rows were parsed from this team member's weekly reports for ${reportingPeriod}.`,
+        }];
+      }
+
+      const groupedProjects = unique(personActivities.map((activity) => activity.project)).slice(0, 6);
+      return groupedProjects.map((project) => {
+        const related = personActivities.filter((activity) => activity.project === project);
+        const weeks = unique(related.map((activity) => activity.weekStart)).sort();
+        const workItems = unique(related.map((activity) => activity.work)).slice(0, 5);
+        return {
+          lead: `${personName} - ${project}`,
+          text: [
+            weeks.length ? `Weeks: ${weeks.join(", ")}.` : "",
+            workItems.length ? workItems.join("; ") : "Delivery activity was recorded in the parsed weekly reports.",
+          ].filter(Boolean).join(" "),
+        };
+      });
+    });
+  }
+
+  function supportingSection(title: string, key: keyof PersonMonth["weeks"][number]): DacSection {
+    const items = peopleData.flatMap((person) => {
+      const personName = clean(person.name) || "Unnamed contributor";
+      const rows = person.weeks.flatMap((week) =>
+        ((week[key] as string[][] | undefined) ?? []).map((row) => ({
+          weekStart: clean(week.weekStart),
+          text: rowText(row),
+        }))
+      ).filter((item) => item.text);
+
+      if (rows.length === 0) {
+        return [{
+          lead: personName,
+          text: `No formal ${title.toLowerCase()} items were parsed from this team member's weekly reports for ${reportingPeriod}.`,
+        }];
+      }
+
+      return rows.slice(0, 6).map((item) => ({
+        lead: personName,
+        text: [item.weekStart, item.text].filter(Boolean).join(" - "),
+      }));
+    });
+
+    if (items.length === 0) return noFormalItems(title, reportingPeriod);
+    return {
+      title,
+      type: "bulletsLead",
+      items,
+    };
+  }
+
+  return [
+    {
+      title: "Monthly Synopsis of Achievements",
+      type: "paragraph",
+      text:
+        `For ${reportingPeriod}, ${contributors.length} contributor(s) submitted ${stats.weekCount} parsed weekly report(s), covering ${stats.activityCount} delivery activity item(s) and ${stats.supportingCount} supporting evidence item(s). This fallback narrative was generated directly from the parsed weekly report data because OpenAI narrative generation was unavailable.`,
+    },
+    {
+      title: "Project Delivery",
+      type: "bulletsPlain",
+      items: [
+        "Account / Client: Telkom CSB IT",
+        `Focus Areas: ${projects.length ? projects.slice(0, 8).join(", ") : "Delivery activity captured in weekly reports"}`,
+        `Reporting Period: ${reportingPeriod}${weekStarts.length ? ` (${weekStarts[0]} to ${weekStarts[weekStarts.length - 1]})` : ""}`,
+        `Contributors: ${contributors.length ? contributors.join(", ") : "No contributors identified"}`,
+      ],
+    },
+    {
+      title: "Project Team",
+      type: "bulletsLead",
+      items: contributors.length
+        ? contributors.map((name) => ({
+          lead: name,
+          text: `Submitted parsed weekly delivery evidence for ${reportingPeriod}.`,
+        }))
+        : [{ lead: "Project team", text: "No named contributors were identified in the parsed weekly report data." }],
+    },
+    {
+      title: "Project Summary",
+      type: "paragraph",
+      text:
+        `The monthly DAC evidence is based on ${stats.weekCount} parsed weekly report(s) from ${contributors.length} team member(s): ${contributors.join(", ") || "no named contributors"}. Activities and supporting evidence were reviewed per team member and retained from the source reports without additional interpretation.`,
+    },
+    {
+      title: "Project Activities",
+      type: "bulletsLead",
+      items: activities.length
+        ? activityItemsByPerson()
+        : [{ lead: "Delivery activity", text: "No project activity rows were available in the parsed weekly reports." }],
+    },
+    supportingSection("Issues and Risks Associated with Delivery", "risks"),
+    supportingSection("Knowledge and Skill Transfer", "knowledgeTransfer"),
+    supportingSection("Continuous Improvement and Value Add", "continuousImprovement"),
+    supportingSection("Continuous Learning", "continuousLearning"),
+    supportingSection("AI – Efficiency and Improvements", "aiEfficiency"),
+  ];
+}
+
+function shouldRequireOpenAiNarrative() {
+  return Deno.env.get(OPENAI_NARRATIVE_REQUIRED)?.toLowerCase() === "true";
+}
+
 function buildPrompt(reportingPeriod: string, peopleData: PersonMonth[]) {
   const payload = {
     reportingPeriod,
@@ -103,6 +253,8 @@ function buildPrompt(reportingPeriod: string, peopleData: PersonMonth[]) {
     "",
     "Use the supplied parsed weekly delivery reports as the only source of truth.",
     "Analyse each person's weekly reports, combine overlapping items, and write polished monthly DAC narrative like a human delivery manager.",
+    "You must inspect every person in peopleData. The DAC is for the full team, not a single contributor.",
+    "Every contributor with source rows must be represented in Project Team and in the relevant Project Activities or evidence sections.",
     "Do not write mechanical count-summary bullets such as 'Analysed 5 project activities...'.",
     "Do not invent projects, dates, tools, risks, outcomes, people, or training that are not supported by the source data.",
     "If a section has no source rows, write a short plain paragraph saying no formal items were logged for that section in the reporting period.",
@@ -124,8 +276,8 @@ function buildPrompt(reportingPeriod: string, peopleData: PersonMonth[]) {
     "- Project Delivery: bulletsPlain with Account / Client, Focus Areas, Reporting Period, and Contributors.",
     "- Project Team: bulletsLead by contributor or role/practice if evident.",
     "- Project Summary: paragraph.",
-    "- Project Activities: bulletsLead grouped by delivery theme/project, not one bullet per raw row unless needed.",
-    "- Remaining evidence sections: paragraph if empty, otherwise bulletsLead.",
+    "- Project Activities: bulletsLead grouped by contributor and delivery theme/project, not one bullet per raw row unless needed.",
+    "- Remaining evidence sections: paragraph only if the whole team has no source rows; otherwise bulletsLead grouped by contributor.",
     "- Do not include a Weekly Report Analysis section.",
     "- Keep bullet text complete enough that a reviewer can see what was delivered, but avoid raw table dumping.",
     "",
@@ -216,43 +368,55 @@ export async function writeMonthlyNarrative(
 ): Promise<DacSection[]> {
   const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
   if (!apiKey) {
+    if (!shouldRequireOpenAiNarrative()) {
+      console.warn("Missing OPENAI_API_KEY secret; using deterministic DAC narrative fallback");
+      return buildFallbackNarrative(reportingPeriod, peopleData);
+    }
     throw new Error("Missing OPENAI_API_KEY secret; DAC narrative generation requires OpenAI");
   }
 
   const model = Deno.env.get("OPENAI_MODEL") || DEFAULT_OPENAI_MODEL;
-  const response = await fetch(OPENAI_RESPONSES_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      max_output_tokens: 12000,
-      input: [
-        {
-          role: "system",
-          content:
-            "You write polished monthly DAC reports from structured weekly delivery data. You are precise, source-grounded, and return only valid JSON.",
-        },
-        {
-          role: "user",
-          content: buildPrompt(reportingPeriod, peopleData),
-        },
-      ],
-    }),
-  });
+  try {
+    const response = await fetch(OPENAI_RESPONSES_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        max_output_tokens: 12000,
+        input: [
+          {
+            role: "system",
+            content:
+              "You write polished monthly DAC reports from structured weekly delivery data. You are precise, source-grounded, and return only valid JSON.",
+          },
+          {
+            role: "user",
+            content: buildPrompt(reportingPeriod, peopleData),
+          },
+        ],
+      }),
+    });
 
-  const requestId = response.headers.get("x-request-id") ?? "";
-  const responseJson = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = responseJson?.error?.message || response.statusText || "unknown OpenAI API error";
-    const suffix = requestId ? ` request-id: ${requestId}` : "";
-    throw new Error(`OpenAI narrative generation failed (${response.status}): ${message}.${suffix}`);
+    const requestId = response.headers.get("x-request-id") ?? "";
+    const responseJson = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = responseJson?.error?.message || response.statusText || "unknown OpenAI API error";
+      const suffix = requestId ? ` request-id: ${requestId}` : "";
+      throw new Error(`OpenAI narrative generation failed (${response.status}): ${message}.${suffix}`);
+    }
+
+    const responseText = extractResponseText(responseJson);
+    if (!responseText) throw new Error("OpenAI returned an empty narrative response");
+
+    return validateSections(parseModelJson(responseText));
+  } catch (err) {
+    if (shouldRequireOpenAiNarrative()) {
+      throw err;
+    }
+    console.warn(`Using deterministic DAC narrative fallback: ${String(err)}`);
+    return buildFallbackNarrative(reportingPeriod, peopleData);
   }
-
-  const responseText = extractResponseText(responseJson);
-  if (!responseText) throw new Error("OpenAI returned an empty narrative response");
-
-  return validateSections(parseModelJson(responseText));
 }

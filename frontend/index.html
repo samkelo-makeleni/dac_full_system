@@ -45,6 +45,7 @@
   .hidden { display: none; }
   .muted { color: #666; font-size: 0.9rem; }
   a.download { color: var(--teal); font-weight: 600; text-decoration: none; }
+  .file-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
 </style>
 </head>
 <body>
@@ -283,23 +284,46 @@
     targetEl.classList.remove("hidden");
   }
 
+  function officeViewerUrl(fileUrl) {
+    return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
+  }
+
+  function appendDacFileActions(targetEl, downloadUrl, downloadText = "Download") {
+    if (!downloadUrl) {
+      targetEl.textContent = "—";
+      return;
+    }
+
+    const actions = document.createElement("span");
+    actions.className = "file-actions";
+
+    const viewLink = document.createElement("a");
+    viewLink.className = "download";
+    viewLink.href = officeViewerUrl(downloadUrl);
+    viewLink.textContent = "View DAC";
+    viewLink.target = "_blank";
+    viewLink.rel = "noopener";
+    actions.appendChild(viewLink);
+
+    const downloadLink = document.createElement("a");
+    downloadLink.className = "download";
+    downloadLink.href = downloadUrl;
+    downloadLink.textContent = downloadText;
+    downloadLink.target = "_blank";
+    downloadLink.rel = "noopener";
+    downloadLink.setAttribute("download", "");
+    actions.appendChild(downloadLink);
+
+    targetEl.appendChild(actions);
+  }
+
   function renderDacRow(tbody, dac) {
     const tr = document.createElement("tr");
     appendTextCell(tr, dac.reporting_period || dac.reportingPeriod || "");
     appendTextCell(tr, new Date(dac.generated_at || Date.now()).toLocaleString());
 
     const fileCell = document.createElement("td");
-    if (dac.downloadUrl) {
-      const link = document.createElement("a");
-      link.className = "download";
-      link.href = dac.downloadUrl;
-      link.textContent = "Download";
-      link.target = "_blank";
-      link.rel = "noopener";
-      fileCell.appendChild(link);
-    } else {
-      fileCell.textContent = "—";
-    }
+    appendDacFileActions(fileCell, dac.downloadUrl);
     tr.appendChild(fileCell);
     appendDacDeleteCell(tr, dac);
     tbody.appendChild(tr);
@@ -758,13 +782,7 @@
         : `Generated DAC for ${json.reportingPeriod}. Email was skipped: ${json.emailSkippedReason || "email is not configured"}.`;
       statusEl.className = "status-ok";
       if (json.downloadUrl) {
-        const link = document.createElement("a");
-        link.className = "download";
-        link.href = json.downloadUrl;
-        link.textContent = "Download generated DAC";
-        link.target = "_blank";
-        link.rel = "noopener";
-        downloadEl.appendChild(link);
+        appendDacFileActions(downloadEl, json.downloadUrl, "Download generated DAC");
         downloadEl.classList.remove("hidden");
 
         const tbody = document.querySelector("#dacsTable tbody");

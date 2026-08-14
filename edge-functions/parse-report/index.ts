@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
     // 2. Parse it
     const buffer = await fileData.arrayBuffer();
     const parsed = await parseWeeklyReportBuffer(buffer, record.storage_path);
+    const parsedPersonName = parsed.name?.trim();
 
     // 3. Store structured entries
     const { error: insertError } = await supabase.from("weekly_entries").insert({
@@ -67,10 +68,14 @@ Deno.serve(async (req) => {
     // 4. Mark as parsed
     await supabase
       .from("weekly_reports")
-      .update({ parsed: true, parse_error: null })
+      .update({
+        parsed: true,
+        parse_error: null,
+        ...(parsedPersonName ? { person_name: parsedPersonName } : {}),
+      })
       .eq("id", record.id);
 
-    return new Response(JSON.stringify({ ok: true, activities: parsed.activities.length }), {
+    return new Response(JSON.stringify({ ok: true, personName: parsedPersonName, activities: parsed.activities.length }), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {

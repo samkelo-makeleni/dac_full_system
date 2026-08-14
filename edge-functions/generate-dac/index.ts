@@ -88,10 +88,12 @@ async function emailDac(params: {
   return { sent: true, reason: null };
 }
 
-async function ensureReportParsed(supabase: any, report: any) {
+async function ensureReportParsed(supabase: any, report: any, forceReparse = false) {
   const existingEntry = Array.isArray(report.weekly_entries) ? report.weekly_entries[0] : report.weekly_entries;
-  // Reparse during DAC generation so existing rows created by an older parser
-  // are refreshed with the latest extraction logic and fuller report detail.
+
+  if (!forceReparse && report.parsed && existingEntry) {
+    return { ok: true, entry: existingEntry, skipped: true };
+  }
 
   const { data: fileData, error: downloadError } = await supabase
     .storage
@@ -106,6 +108,7 @@ async function ensureReportParsed(supabase: any, report: any) {
 
   try {
     const parsed = await parseWeeklyReportBuffer(await fileData.arrayBuffer(), report.storage_path);
+    const parsedPersonName = parsed.name?.trim();
     const entry = {
       activities: parsed.activities,
       risks: parsed.risks,
@@ -129,8 +132,13 @@ async function ensureReportParsed(supabase: any, report: any) {
       return { ok: false, error: message };
     }
 
-    await supabase.from("weekly_reports").update({ parsed: true, parse_error: null }).eq("id", report.id);
+    await supabase.from("weekly_reports").update({
+      parsed: true,
+      parse_error: null,
+      ...(parsedPersonName ? { person_name: parsedPersonName } : {}),
+    }).eq("id", report.id);
     report.parsed = true;
+    if (parsedPersonName) report.person_name = parsedPersonName;
     report.weekly_entries = [savedEntry ?? entry];
     return { ok: true, entry: savedEntry ?? entry };
   } catch (err) {
@@ -186,9 +194,11 @@ Deno.serve(async (req) => {
     }
 
     let periodStartOverride: string | undefined;
+    let forceReparse = false;
     try {
       const body = await req.json();
       periodStartOverride = body?.periodStart;
+      forceReparse = body?.forceReparse === true;
     } catch {
       // no body — fine, use default (previous month)
     }
@@ -219,7 +229,7 @@ Deno.serve(async (req) => {
 
     const parseFailures: any[] = [];
     for (const report of reports as any[]) {
-      const parsedResult = await ensureReportParsed(supabase, report);
+      const parsedResult = await ensureReportParsed(supabase, report, forceReparse);
       if (!parsedResult.ok) {
         parseFailures.push({
           personName: report.person_name,
