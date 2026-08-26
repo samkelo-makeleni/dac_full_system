@@ -79,7 +79,7 @@
       </select>
     </div>
     <label for="email">Email</label>
-    <input id="email" type="email" placeholder="you@falcorp.co.za" />
+    <input id="email" type="email" placeholder="you@falcorp.co.za" pattern="^[^@\s]+@falcorp\.co\.za$" />
     <label for="password">Password</label>
     <input id="password" type="password" />
     <button id="loginBtn">Sign in</button>
@@ -230,6 +230,15 @@
     el("loginError").textContent = "";
     el("authStatus").textContent = "";
     el("authStatus").className = "muted";
+  }
+
+  function isFalcorpEmail(email) {
+    return /^[^@\s]+@falcorp\.co\.za$/i.test(email);
+  }
+
+  function showFalcorpEmailError(targetEl) {
+    targetEl.textContent = "Use your Falcorp email address ending with @falcorp.co.za.";
+    targetEl.className = "status-error";
   }
 
   function monthLabel(dateString) {
@@ -551,6 +560,11 @@
     el("authStatus").textContent = "";
     const email = el("email").value.trim();
     const password = el("password").value;
+    if (!isFalcorpEmail(email)) {
+      showFalcorpEmailError(el("loginError"));
+      return;
+    }
+
     setButtonLoading(button, true, "Signing in...");
     try {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
@@ -578,6 +592,10 @@
 
     if (!fullName || !requestedRole || !email || !password) {
       el("loginError").textContent = "Enter your full name, role, email, and password to register.";
+      return;
+    }
+    if (!isFalcorpEmail(email)) {
+      showFalcorpEmailError(el("loginError"));
       return;
     }
 
@@ -619,6 +637,10 @@
     if (!email) {
       el("authStatus").textContent = "Enter your email above, then click Forgot password.";
       el("authStatus").className = "status-error";
+      return;
+    }
+    if (!isFalcorpEmail(email)) {
+      showFalcorpEmailError(el("authStatus"));
       return;
     }
 
