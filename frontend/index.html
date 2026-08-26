@@ -244,7 +244,7 @@
       }
 
       await loadMyUploads();
-      if (currentProfile?.role === "manager") {
+      if (["team_lead", "manager"].includes(currentProfile?.role)) {
         await loadAllUploads();
       }
     } finally {
@@ -253,7 +253,7 @@
   }
 
   async function deleteAllReports(button) {
-    if (currentProfile?.role !== "manager") return;
+    if (!["team_lead", "manager"].includes(currentProfile?.role)) return;
     const confirmed = confirm(
       "Delete ALL weekly reports? This removes every uploaded report file and all parsed report data. Generated DACs will not be deleted."
     );
