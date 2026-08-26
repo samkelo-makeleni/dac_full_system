@@ -82,7 +82,10 @@ async function emailDac(params: {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`DAC email failed ${response.status}: ${errText}`);
+    return {
+      sent: false,
+      reason: `DAC email failed ${response.status}: ${errText}`,
+    };
   }
 
   return { sent: true, reason: null };
