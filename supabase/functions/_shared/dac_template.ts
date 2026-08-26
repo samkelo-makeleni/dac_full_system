@@ -34,15 +34,7 @@ export interface DacData {
   sections: DacSection[];
 }
 
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
 export async function buildDac(data: DacData): Promise<Uint8Array> {
-  const logo = base64ToUint8Array(FALCORP_LOGO_BASE64);
   const fullWidth = 9350;
   const col1 = 2400;
   const col2 = fullWidth - col1;
@@ -215,7 +207,7 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
       },
       footers: { default: new Footer({ children: footerParas() }) },
       children: [
-        new Paragraph({ children: [new ImageRun({ data: logo, type: "png", transformation: { width: 170, height: 62 } })] }),
+        new Paragraph({ children: [new ImageRun({ data: FALCORP_LOGO_BASE64, type: "png", transformation: { width: 170, height: 62 } })] }),
         new Paragraph({ text: "" }),
         new Paragraph({ children: [new TextRun({ text: "Delivery Acceptance Certificate (DAC)", bold: true, size: 32 })], spacing: { after: 200 } }),
         infoTable,
