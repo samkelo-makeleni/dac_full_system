@@ -46,6 +46,8 @@
   .muted { color: #666; font-size: 0.9rem; }
   a.download { color: var(--teal); font-weight: 600; text-decoration: none; }
   .file-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+  .table-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .table-actions button { white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -88,20 +90,19 @@
 
     <h3>Your recent uploads</h3>
     <table id="myUploadsTable">
-      <thead><tr><th>Month</th><th>Week</th><th>Start</th><th>File</th><th>Status</th><th></th></tr></thead>
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Week</th>
+          <th>Start</th>
+          <th>File</th>
+          <th>Status</th>
+          <th><span class="table-actions"><span>Delete</span><button id="deleteAllReportsBtn" class="danger" type="button">Delete all reports</button></span></th>
+        </tr>
+      </thead>
       <tbody></tbody>
     </table>
-  </section>
-
-  <!-- MANAGER VIEW -->
-  <section id="managerView" class="card hidden">
-    <h2>All weekly reports</h2>
-    <button id="deleteAllReportsBtn" class="danger" type="button">Delete all reports</button>
     <p id="deleteAllReportsStatus" class="muted"></p>
-    <table id="allUploadsTable">
-      <thead><tr><th>Person</th><th>Month</th><th>Week</th><th>Start</th><th>Status</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
   </section>
 
   <section id="managerDacsView" class="card hidden">
@@ -244,9 +245,6 @@
       }
 
       await loadMyUploads();
-      if (["team_lead", "manager"].includes(currentProfile?.role)) {
-        await loadAllUploads();
-      }
     } finally {
       setButtonLoading(button, false);
     }
@@ -291,7 +289,6 @@
       statusEl.textContent = `Deleted ${json.deletedReports || 0} weekly report${json.deletedReports === 1 ? "" : "s"}.`;
       statusEl.className = "status-ok";
       await loadMyUploads();
-      await loadAllUploads();
     } finally {
       setButtonLoading(button, false);
     }
@@ -416,7 +413,6 @@
   function showLogin() {
     el("loginView").classList.remove("hidden");
     el("teamLeadView").classList.add("hidden");
-    el("managerView").classList.add("hidden");
     el("managerDacsView").classList.add("hidden");
     el("userBadge").textContent = "";
     currentProfile = null;
@@ -467,11 +463,9 @@
 
       if (["team_lead", "manager"].includes(profile.role)) {
         el("teamLeadView").classList.remove("hidden");
-        el("managerView").classList.remove("hidden");
         el("managerDacsView").classList.remove("hidden");
         el("personName").value = profile.full_name;
         await loadMyUploads();
-        await loadAllUploads();
         await loadDacs();
       }
     } catch (err) {
@@ -598,9 +592,6 @@
       statusEl.className = "status-ok";
       el("reportFile").value = "";
       await loadMyUploads();
-      if (currentProfile.role === "manager") {
-        await loadAllUploads();
-      }
     } finally {
       setButtonLoading(button, false);
     }
@@ -622,27 +613,6 @@
       appendTextCell(tr, monthWeekLabel(r.week_start));
       appendTextCell(tr, r.week_start);
       appendTextCell(tr, r.storage_path.split("/").pop());
-      appendStatusCell(tr, r);
-      appendDeleteCell(tr, r);
-      tbody.appendChild(tr);
-    }
-  }
-
-  async function loadAllUploads() {
-    const { data, error } = await supabaseClient
-      .from("weekly_reports")
-      .select("id, person_name, week_start, storage_path, parsed, parse_error")
-      .order("week_start", { ascending: false });
-
-    const tbody = document.querySelector("#allUploadsTable tbody");
-    tbody.innerHTML = "";
-    if (error || !data) return;
-    for (const r of data) {
-      const tr = document.createElement("tr");
-      appendTextCell(tr, r.person_name);
-      appendTextCell(tr, monthLabel(r.week_start));
-      appendTextCell(tr, monthWeekLabel(r.week_start));
-      appendTextCell(tr, r.week_start);
       appendStatusCell(tr, r);
       appendDeleteCell(tr, r);
       tbody.appendChild(tr);
@@ -715,9 +685,6 @@
         statusEl.className = "status-error";
         showGenerateFailures(json, downloadEl);
         await loadMyUploads();
-        if (currentProfile.role === "manager") {
-          await loadAllUploads();
-        }
         return;
       }
       statusEl.textContent = json.emailSent
