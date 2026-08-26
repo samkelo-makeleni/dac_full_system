@@ -64,13 +64,20 @@
 
   <!-- LOGIN VIEW -->
   <section id="loginView" class="card">
-    <h2>Sign in</h2>
-    <p class="muted">Access is restricted to approved Team Leads and Managers. Contact your Delivery Manager if you need an account.</p>
+    <h2 id="authTitle">Sign in</h2>
+    <p id="authHelp" class="muted">Access is restricted to approved Team Leads and Managers. Contact your Delivery Manager if you need an account.</p>
+    <div id="fullNameWrap" class="hidden">
+      <label for="fullName">Full name</label>
+      <input id="fullName" type="text" placeholder="e.g. Samkelo Makeleni" />
+    </div>
     <label for="email">Email</label>
     <input id="email" type="email" placeholder="you@falcorp.co.za" />
     <label for="password">Password</label>
     <input id="password" type="password" />
     <button id="loginBtn">Sign in</button>
+    <button id="registerBtn" class="secondary hidden" type="button">Register</button>
+    <button id="showRegisterBtn" class="secondary" type="button">Create account</button>
+    <button id="showLoginBtn" class="secondary hidden" type="button">Back to sign in</button>
     <button id="forgotPasswordBtn" class="secondary" type="button">Forgot password?</button>
     <p id="loginError" class="status-error"></p>
     <p id="authStatus" class="muted"></p>
@@ -148,6 +155,7 @@
   const el = (id) => document.getElementById(id);
 
   let currentProfile = null;
+  let authMode = "login";
   const parsingReports = new Set();
 
   function setButtonLoading(button, isLoading, loadingText = "Working...") {
@@ -195,6 +203,24 @@
       cell.appendChild(span);
     }
     row.appendChild(cell);
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    const isRegister = mode === "register";
+    el("authTitle").textContent = isRegister ? "Create account" : "Sign in";
+    el("authHelp").textContent = isRegister
+      ? "Create your account, then ask your Delivery Manager to approve your profile before you can access the portal."
+      : "Access is restricted to approved Team Leads and Managers. Contact your Delivery Manager if you need an account.";
+    el("fullNameWrap").classList.toggle("hidden", !isRegister);
+    el("loginBtn").classList.toggle("hidden", isRegister);
+    el("registerBtn").classList.toggle("hidden", !isRegister);
+    el("showRegisterBtn").classList.toggle("hidden", isRegister);
+    el("showLoginBtn").classList.toggle("hidden", !isRegister);
+    el("forgotPasswordBtn").classList.toggle("hidden", isRegister);
+    el("loginError").textContent = "";
+    el("authStatus").textContent = "";
+    el("authStatus").className = "muted";
   }
 
   function monthLabel(dateString) {
@@ -524,6 +550,53 @@
         return;
       }
       await loadProfileAndRender(data.user.id, data.user.email);
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
+
+  el("showRegisterBtn").addEventListener("click", () => setAuthMode("register"));
+  el("showLoginBtn").addEventListener("click", () => setAuthMode("login"));
+
+  el("registerBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    el("loginError").textContent = "";
+    el("authStatus").textContent = "";
+    const fullName = el("fullName").value.trim();
+    const email = el("email").value.trim();
+    const password = el("password").value;
+
+    if (!fullName || !email || !password) {
+      el("loginError").textContent = "Enter your full name, email, and password to register.";
+      return;
+    }
+
+    setButtonLoading(button, true, "Registering...");
+    try {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+        },
+      });
+
+      if (error) {
+        el("loginError").textContent = error.message;
+        return;
+      }
+
+      if (data.session) {
+        await supabaseClient.auth.signOut();
+      }
+
+      setAuthMode("login");
+      el("authStatus").textContent = "Account created. Ask your Delivery Manager to approve your profile before signing in.";
+      el("authStatus").className = "status-ok";
+      el("password").value = "";
     } finally {
       setButtonLoading(button, false);
     }
