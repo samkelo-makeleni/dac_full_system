@@ -38,3 +38,7 @@ declare module "npm:mammoth@1.7.2" {
   const mammoth: any;
   export default mammoth;
 }
+
+declare module "node:buffer" {
+  export const Buffer: any;
+}
