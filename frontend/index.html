@@ -70,6 +70,14 @@
       <label for="fullName">Full name</label>
       <input id="fullName" type="text" placeholder="e.g. Samkelo Makeleni" />
     </div>
+    <div id="requestedRoleWrap" class="hidden">
+      <label for="requestedRole">Register as</label>
+      <select id="requestedRole">
+        <option value="">Select your role</option>
+        <option value="team_lead">Team Lead</option>
+        <option value="manager">Manager</option>
+      </select>
+    </div>
     <label for="email">Email</label>
     <input id="email" type="email" placeholder="you@falcorp.co.za" />
     <label for="password">Password</label>
@@ -210,9 +218,10 @@
     const isRegister = mode === "register";
     el("authTitle").textContent = isRegister ? "Create account" : "Sign in";
     el("authHelp").textContent = isRegister
-      ? "Create your account, then ask your Delivery Manager to approve your profile before you can access the portal."
+      ? "Create your account and choose your role, then ask your Delivery Manager to approve your profile before you can access the portal."
       : "Access is restricted to approved Team Leads and Managers. Contact your Delivery Manager if you need an account.";
     el("fullNameWrap").classList.toggle("hidden", !isRegister);
+    el("requestedRoleWrap").classList.toggle("hidden", !isRegister);
     el("loginBtn").classList.toggle("hidden", isRegister);
     el("registerBtn").classList.toggle("hidden", !isRegister);
     el("showRegisterBtn").classList.toggle("hidden", isRegister);
@@ -563,11 +572,12 @@
     el("loginError").textContent = "";
     el("authStatus").textContent = "";
     const fullName = el("fullName").value.trim();
+    const requestedRole = el("requestedRole").value;
     const email = el("email").value.trim();
     const password = el("password").value;
 
-    if (!fullName || !email || !password) {
-      el("loginError").textContent = "Enter your full name, email, and password to register.";
+    if (!fullName || !requestedRole || !email || !password) {
+      el("loginError").textContent = "Enter your full name, role, email, and password to register.";
       return;
     }
 
@@ -579,6 +589,7 @@
         options: {
           data: {
             full_name: fullName,
+            requested_role: requestedRole,
           },
           emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
         },
@@ -594,7 +605,7 @@
       }
 
       setAuthMode("login");
-      el("authStatus").textContent = "Account created. Ask your Delivery Manager to approve your profile before signing in.";
+      el("authStatus").textContent = "Account created. Ask your Delivery Manager to approve your requested role before signing in.";
       el("authStatus").className = "status-ok";
       el("password").value = "";
     } finally {
