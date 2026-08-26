@@ -127,6 +127,7 @@
   // ---- Supabase project config ----
   const SUPABASE_URL = "https://lrqvvxxhaxakmhnvrlbn.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_YDEqAubV8Dbpe6K_WlpY8A_chMCK6Ke";
+  const PARSE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/parse-report`;
   const GENERATE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/generate-dac`;
   const DELETE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-report`;
   const DELETE_ALL_REPORTS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-all-reports`;
@@ -147,6 +148,7 @@
   const el = (id) => document.getElementById(id);
 
   let currentProfile = null;
+  const parsingReports = new Set();
 
   function setButtonLoading(button, isLoading, loadingText = "Working...") {
     if (!button) return;
@@ -292,6 +294,39 @@
     } finally {
       setButtonLoading(button, false);
     }
+  }
+
+  async function parseReportNow(reportId) {
+    if (!reportId || parsingReports.has(reportId)) return;
+    parsingReports.add(reportId);
+
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch(PARSE_REPORT_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ reportId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        console.error("Report parse failed:", json?.error || res.statusText);
+      }
+    } finally {
+      parsingReports.delete(reportId);
+    }
+  }
+
+  async function parsePendingReports(reports) {
+    const pending = (reports || []).filter((report) => !report.parsed && !report.parse_error);
+    if (!pending.length) return;
+
+    await Promise.all(pending.map((report) => parseReportNow(report.id)));
+    await loadMyUploads({ retryPending: false });
   }
 
   function showGenerateFailures(json, targetEl) {
@@ -573,18 +608,22 @@
           return;
         }
 
-        const { error: insertError } = await supabaseClient.from("weekly_reports").insert({
+        const { data: insertedReport, error: insertError } = await supabaseClient.from("weekly_reports").insert({
           uploaded_by: currentProfile.id,
           person_name: personName,
           week_start: weekStart,
           project: "Telkom CSB",
           storage_path: storagePath,
-        });
+        }).select("id").single();
 
         if (insertError) {
           statusEl.textContent = `Saved ${file.name} but failed to record metadata: ${insertError.message}`;
           statusEl.className = "status-error";
           return;
+        }
+
+        if (insertedReport?.id) {
+          parseReportNow(insertedReport.id);
         }
       }
 
@@ -597,7 +636,8 @@
     }
   });
 
-  async function loadMyUploads() {
+  async function loadMyUploads(options = {}) {
+    const retryPending = options.retryPending !== false;
     const { data, error } = await supabaseClient
       .from("weekly_reports")
       .select("id, week_start, storage_path, parsed, parse_error")
@@ -616,6 +656,10 @@
       appendStatusCell(tr, r);
       appendDeleteCell(tr, r);
       tbody.appendChild(tr);
+    }
+
+    if (retryPending) {
+      parsePendingReports(data);
     }
   }
 
