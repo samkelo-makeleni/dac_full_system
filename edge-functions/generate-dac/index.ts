@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
     // --- Authorization ---
     // Allowed callers: (a) pg_cron, which calls with the service role key
     // in the Authorization header, or (b) a logged-in user with role
-    // 'manager' or 'team_lead', identified via their own JWT (sent by the frontend).
+    // 'manager', identified via their own JWT (sent by the frontend).
     const authHeader = req.headers.get("Authorization") ?? "";
     const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
 
@@ -188,8 +188,8 @@ Deno.serve(async (req) => {
         .select("role")
         .eq("id", userData.user.id)
         .single();
-      if (!profile || !["manager", "team_lead"].includes(profile.role)) {
-        return new Response(JSON.stringify({ ok: false, error: "Only managers and team leads can trigger DAC generation" }), { status: 403, headers: corsHeaders });
+      if (!profile || profile.role !== "manager") {
+        return new Response(JSON.stringify({ ok: false, error: "Only managers can trigger DAC generation" }), { status: 403, headers: corsHeaders });
       }
     }
 
@@ -323,20 +323,35 @@ Deno.serve(async (req) => {
 
     if (uploadError) throw uploadError;
 
-    // 7. Record it
-    const { data: dacRecord, error: insertError } = await supabase
+    // 7. Record it. Regeneration replaces the stored file and updates the
+    // existing month row instead of creating duplicates.
+    const dacRecordPayload = {
+      reporting_period: label,
+      period_start: startStr,
+      period_end: endStr,
+      storage_path: storagePath,
+      generated_by: "automated",
+      generated_at: new Date().toISOString(),
+    };
+
+    const { data: existingDacs, error: existingDacsError } = await supabase
       .from("generated_dacs")
-      .insert({
-        reporting_period: label,
-        period_start: startStr,
-        period_end: endStr,
-        storage_path: storagePath,
-        generated_by: "automated",
-      })
+      .select("id")
+      .eq("period_start", startStr)
+      .limit(1);
+
+    if (existingDacsError) throw existingDacsError;
+
+    const existingDacId = existingDacs?.[0]?.id;
+    const recordQuery = existingDacId
+      ? supabase.from("generated_dacs").update(dacRecordPayload).eq("id", existingDacId)
+      : supabase.from("generated_dacs").insert(dacRecordPayload);
+
+    const { data: dacRecord, error: recordError } = await recordQuery
       .select("id")
       .single();
 
-    if (insertError) throw insertError;
+    if (recordError) throw recordError;
 
     // 8. Email the generated DAC to the manager
     const emailResult = await emailDac({

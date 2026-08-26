@@ -46,7 +46,7 @@ This creates:
 
 ## 3. Add your Team Leads and Managers
 
-There's no public sign-up — access is invite-only, added by you.
+Access should be invite-only, added by you. In Supabase, keep public email sign-up disabled for this project and create users from the dashboard.
 
 For each person:
 1. Dashboard → **Authentication → Users → Add user** (set email + a temporary password, or use "send invite email" if you've set up email).
@@ -54,7 +54,10 @@ For each person:
 3. SQL Editor:
    ```sql
    insert into public.profiles (id, full_name, role)
-   values ('paste-user-uid-here', 'Boipelo Motshabi', 'team_lead');
+   values ('paste-user-uid-here', 'Boipelo Motshabi', 'team_lead')
+   on conflict (id) do update
+   set full_name = excluded.full_name,
+       role = excluded.role;
    ```
    Use `'manager'` for managers (e.g. Eben le Roux, Tabea Phele).
 
@@ -83,13 +86,17 @@ Repeat for everyone who needs access.
    supabase secrets set DAC_MANAGER_EMAIL="lrouxe1@telkom.co.za,samkelo.makeleni@falcorp.co.za"
    supabase secrets set OPENAI_API_KEY=sk-your-openai-key-here
    supabase secrets set OPENAI_MODEL=gpt-5
+   supabase secrets set PARSE_REPORT_WEBHOOK_SECRET="make-a-long-random-secret"
    ```
    (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are automatically available to edge functions — no need to set them manually.)
    The deployed Supabase Edge Functions use OpenAI's HTTPS Responses API directly because they run on Deno/TypeScript.
-4. Deploy both functions:
+4. Deploy the functions:
    ```
    supabase functions deploy parse-report --no-verify-jwt
    supabase functions deploy generate-dac --no-verify-jwt
+   supabase functions deploy delete-report --no-verify-jwt
+   supabase functions deploy delete-all-reports --no-verify-jwt
+   supabase functions deploy delete-dac --no-verify-jwt
    ```
 
 ---
@@ -99,7 +106,8 @@ Repeat for everyone who needs access.
 1. Dashboard → **Database → Webhooks → Create a new hook**.
 2. Table: `weekly_reports`. Events: `Insert`.
 3. Type: **Supabase Edge Function**. Function: `parse-report`.
-4. Save.
+4. Add header `x-webhook-secret` with the same value as `PARSE_REPORT_WEBHOOK_SECRET`.
+5. Save.
 
 Now every new row in `weekly_reports` (i.e. every upload) automatically triggers parsing within seconds.
 
@@ -151,6 +159,7 @@ To test it immediately without waiting for the 1st, just call the function manua
 - Parsing happens automatically per upload.
 - On the 1st of each month, the previous month's DAC is generated automatically — no one needs to do anything.
 - Managers can always trigger an extra/regenerated run via the "Generate DAC now" button (e.g. if a late report came in after the automatic run).
+- Managers can delete individual reports or delete all weekly reports when resetting a reporting cycle. Generated DACs are not deleted by the bulk weekly-report delete action.
 
 ---
 
@@ -184,6 +193,9 @@ edge-functions/
     logo_base64.ts           — embedded Falcorp logo
   parse-report/index.ts     — runs on every upload
   generate-dac/index.ts     — runs monthly (or on-demand)
+  delete-report/index.ts    — deletes one weekly report
+  delete-all-reports/index.ts — deletes all weekly reports
+  delete-dac/index.ts       — deletes one generated DAC
 
 frontend/
   index.html                — the whole portal (login, upload, dashboard) — no build step

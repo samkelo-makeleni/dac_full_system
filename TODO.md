@@ -18,6 +18,7 @@
   - `DAC_MANAGER_EMAIL`
   - `OPENAI_API_KEY`
   - `OPENAI_MODEL`
+  - `PARSE_REPORT_WEBHOOK_SECRET`
 
 ## Security And Policies
 
@@ -25,6 +26,11 @@
   - `temp allow any authenticated user read weekly reports`
   - `temp allow any authenticated user upload weekly reports`
   - Remove or replace them with stricter policies once testing is complete.
+
+- Apply the hardened auth/role SQL in `sql/schema.sql` and `sql/storage_policies.sql` to the live Supabase project.
+  - Confirm public sign-up is disabled in Supabase Auth.
+  - Confirm only managers can read generated DAC records/files.
+  - Confirm users cannot self-assign or update their own role.
 
 - Keep the Supabase `service_role` key out of the frontend and public docs.
   - It should only be used in Supabase SQL setup, Supabase secrets, or protected automation.
@@ -36,11 +42,7 @@
   - Confirm the frontend deployment target is GitHub Pages.
   - Include the live website URL once GitHub Pages deployment is confirmed.
 
-- Expand `README.md` beyond the initial repository title.
-  - Add a short system overview.
-  - Add feature list.
-  - Add setup and deployment links.
-  - Add GitHub Actions status badges after workflows are stable.
+- Add GitHub Actions status badges after workflows are stable.
 
 ## Product Follow-Up
 

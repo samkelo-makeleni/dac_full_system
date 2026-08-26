@@ -15,9 +15,18 @@ import { parseWeeklyReportBuffer } from "../_shared/docx_parser.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const WEBHOOK_SECRET = Deno.env.get("PARSE_REPORT_WEBHOOK_SECRET");
 
 Deno.serve(async (req) => {
   try {
+    if (!WEBHOOK_SECRET) {
+      return new Response(JSON.stringify({ error: "Missing PARSE_REPORT_WEBHOOK_SECRET" }), { status: 500 });
+    }
+
+    if (req.headers.get("x-webhook-secret") !== WEBHOOK_SECRET) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    }
+
     const payload = await req.json();
     // Database Webhook payload shape: { type: "INSERT", table, record, ... }
     const record = payload.record;

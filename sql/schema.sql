@@ -28,24 +28,9 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_full_name text;
-  v_role public.user_role;
 begin
-  v_full_name := coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1));
-
-  v_role := case
-    when new.raw_user_meta_data->>'role' in ('team_lead', 'manager')
-      then (new.raw_user_meta_data->>'role')::public.user_role
-    else 'team_lead'
-  end;
-
-  insert into public.profiles (id, full_name, role)
-  values (new.id, v_full_name, v_role)
-  on conflict (id) do update
-    set full_name = excluded.full_name,
-        role = excluded.role;
-
+  -- Auth users are not automatically approved for portal access. An admin must
+  -- create/update public.profiles with the intended role after inviting a user.
   return new;
 end;
 $$;
@@ -54,27 +39,15 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
--- Everyone who is logged in can see the list of profiles. The insert policy is
--- intentionally broad because the auth trigger inserts a profile row with a
--- SECURITY DEFINER function; inside that function auth.uid() is null, so using
--- auth.uid() here would reject the signup. Regular users can still update their
--- own row, and the trigger ensures the row is created for the new auth user.
+-- Everyone who is logged in can see the list of approved profiles.
 create policy "profiles readable by any authenticated user"
   on public.profiles for select
   using (auth.role() = 'authenticated');
 
-create policy "trigger can create profile row"
-  on public.profiles for insert
-  with check (true);
-
-create policy "users can update own profile"
-  on public.profiles for update
-  using (id = auth.uid())
-  with check (id = auth.uid());
-
-create policy "users can delete own profile"
-  on public.profiles for delete
-  using (id = auth.uid());
+drop policy if exists "trigger can create profile row" on public.profiles;
+drop policy if exists "users can create own team lead profile" on public.profiles;
+drop policy if exists "users can update own profile" on public.profiles;
+drop policy if exists "users can delete own profile" on public.profiles;
 
 
 -- ---------------------------------------------------------------------
@@ -182,9 +155,17 @@ create table if not exists public.generated_dacs (
 
 alter table public.generated_dacs enable row level security;
 
-create policy "managers and team leads can read generated dacs"
+drop policy if exists "managers and team leads can read generated dacs" on public.generated_dacs;
+drop policy if exists "managers can read generated dacs" on public.generated_dacs;
+
+create policy "managers can read generated dacs"
   on public.generated_dacs for select
-  using (auth.role() = 'authenticated');
+  using (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.role = 'manager'
+    )
+  );
 
 
 -- ---------------------------------------------------------------------

@@ -1,5 +1,5 @@
-// Deletes a generated DAC record and its stored DOCX.
-// Managers can delete generated DACs.
+// Deletes all weekly reports and their stored DOCX files.
+// Managers only.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -20,14 +20,6 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization") ?? "";
     const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
-    const { dacId } = await req.json();
-
-    if (!dacId) {
-      return new Response(JSON.stringify({ ok: false, error: "Missing dacId" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
-    }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const { data: userData, error: userError } = await supabase.auth.getUser(bearerToken);
@@ -45,49 +37,57 @@ Deno.serve(async (req) => {
       .single();
 
     if (profileError || !profile || profile.role !== "manager") {
-      return new Response(JSON.stringify({ ok: false, error: "Only managers can delete generated DACs" }), {
+      return new Response(JSON.stringify({ ok: false, error: "Only managers can delete all reports" }), {
         status: 403,
         headers: corsHeaders,
       });
     }
 
-    const { data: dac, error: dacError } = await supabase
-      .from("generated_dacs")
-      .select("id, storage_path")
-      .eq("id", dacId)
-      .single();
+    const { data: reports, error: reportsError } = await supabase
+      .from("weekly_reports")
+      .select("id, storage_path");
 
-    if (dacError || !dac) {
-      return new Response(JSON.stringify({ ok: false, error: "Generated DAC not found" }), {
-        status: 404,
-        headers: corsHeaders,
-      });
-    }
-
-    const { error: storageError } = await supabase.storage
-      .from("generated-dacs")
-      .remove([dac.storage_path]);
-
-    if (storageError) {
-      return new Response(JSON.stringify({ ok: false, error: `Storage delete failed: ${storageError.message}` }), {
+    if (reportsError) {
+      return new Response(JSON.stringify({ ok: false, error: `Report lookup failed: ${reportsError.message}` }), {
         status: 500,
         headers: corsHeaders,
       });
     }
 
-    const { error: deleteError } = await supabase
-      .from("generated_dacs")
-      .delete()
-      .eq("id", dac.id);
+    const reportIds = (reports ?? []).map((report) => report.id).filter(Boolean);
+    const storagePaths = Array.from(
+      new Set((reports ?? []).map((report) => report.storage_path).filter(Boolean)),
+    );
 
-    if (deleteError) {
-      return new Response(JSON.stringify({ ok: false, error: `DAC delete failed: ${deleteError.message}` }), {
-        status: 500,
-        headers: corsHeaders,
-      });
+    if (storagePaths.length > 0) {
+      const { error: storageError } = await supabase
+        .storage
+        .from("weekly-reports")
+        .remove(storagePaths);
+
+      if (storageError) {
+        return new Response(JSON.stringify({ ok: false, error: `Storage delete failed: ${storageError.message}` }), {
+          status: 500,
+          headers: corsHeaders,
+        });
+      }
     }
 
-    return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
+    if (reportIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("weekly_reports")
+        .delete()
+        .in("id", reportIds);
+
+      if (deleteError) {
+        return new Response(JSON.stringify({ ok: false, error: `Report delete failed: ${deleteError.message}` }), {
+          status: 500,
+          headers: corsHeaders,
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, deletedReports: reportIds.length }), { headers: corsHeaders });
   } catch (err) {
     console.error(err);
     return new Response(JSON.stringify({ ok: false, error: String(err) }), {

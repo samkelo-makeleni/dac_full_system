@@ -43,6 +43,9 @@ jobs:
       - name: Deploy delete-report
         run: supabase functions deploy delete-report --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
 
+      - name: Deploy delete-all-reports
+        run: supabase functions deploy delete-all-reports --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+
       - name: Deploy delete-dac
         run: supabase functions deploy delete-dac --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
 

@@ -69,28 +69,9 @@
     <label for="password">Password</label>
     <input id="password" type="password" />
     <button id="loginBtn">Sign in</button>
-    <button id="showSignUpBtn" class="secondary" type="button">Create Account</button>
     <button id="forgotPasswordBtn" class="secondary" type="button">Forgot password?</button>
     <p id="loginError" class="status-error"></p>
     <p id="authStatus" class="muted"></p>
-
-    <div id="signUpBlock" class="hidden">
-      <hr />
-      <h3>Create account</h3>
-      <label for="signUpName">Full name</label>
-      <input id="signUpName" type="text" placeholder="e.g. Samkelo Makeleni" />
-      <label for="signUpEmail">Email</label>
-      <input id="signUpEmail" type="email" placeholder="you@falcorp.co.za" />
-      <label for="signUpRole">Role</label>
-      <select id="signUpRole">
-        <option value="team_lead">Team Lead</option>
-        <option value="manager">Manager</option>
-      </select>
-      <label for="signUpPassword">Password</label>
-      <input id="signUpPassword" type="password" placeholder="At least 6 characters" />
-      <button id="signUpBtn" type="button">Create account</button>
-      <p id="signUpStatus" class="muted"></p>
-    </div>
   </section>
 
   <!-- TEAM LEAD VIEW -->
@@ -115,6 +96,8 @@
   <!-- MANAGER VIEW -->
   <section id="managerView" class="card hidden">
     <h2>All weekly reports</h2>
+    <button id="deleteAllReportsBtn" class="danger" type="button">Delete all reports</button>
+    <p id="deleteAllReportsStatus" class="muted"></p>
     <table id="allUploadsTable">
       <thead><tr><th>Person</th><th>Month</th><th>Week</th><th>Start</th><th>Status</th><th></th></tr></thead>
       <tbody></tbody>
@@ -145,6 +128,7 @@
   const SUPABASE_ANON_KEY = "sb_publishable_YDEqAubV8Dbpe6K_WlpY8A_chMCK6Ke";
   const GENERATE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/generate-dac`;
   const DELETE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-report`;
+  const DELETE_ALL_REPORTS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-all-reports`;
   const DELETE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-dac`;
   // -----------------------------------------
 
@@ -268,6 +252,51 @@
     }
   }
 
+  async function deleteAllReports(button) {
+    if (currentProfile?.role !== "manager") return;
+    const confirmed = confirm(
+      "Delete ALL weekly reports? This removes every uploaded report file and all parsed report data. Generated DACs will not be deleted."
+    );
+    if (!confirmed) return;
+
+    const statusEl = el("deleteAllReportsStatus");
+    statusEl.textContent = "Deleting all weekly reports...";
+    statusEl.className = "muted";
+    setButtonLoading(button, true, "Deleting...");
+
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) {
+        statusEl.textContent = "Your session expired. Please log in again.";
+        statusEl.className = "status-error";
+        return;
+      }
+
+      const res = await fetch(DELETE_ALL_REPORTS_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+
+      if (!json.ok) {
+        statusEl.textContent = "Could not delete all reports: " + (json.error || "Unknown error");
+        statusEl.className = "status-error";
+        return;
+      }
+
+      statusEl.textContent = `Deleted ${json.deletedReports || 0} weekly report${json.deletedReports === 1 ? "" : "s"}.`;
+      statusEl.className = "status-ok";
+      await loadMyUploads();
+      await loadAllUploads();
+    } finally {
+      setButtonLoading(button, false);
+    }
+  }
+
   function showGenerateFailures(json, targetEl) {
     const failures = json.parseFailures || json.pendingReports || [];
     if (!failures.length) return;
@@ -378,7 +407,7 @@
   async function init() {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (session) {
-      await loadProfileAndRender(session.user.id, session.user.email, session.user.user_metadata || {});
+      await loadProfileAndRender(session.user.id, session.user.email);
     } else {
       showLogin();
     }
@@ -413,8 +442,8 @@
     }
   }
 
-  async function ensureProfileExists(userId, fullName, role, email) {
-    const { data: existingProfile, error: lookupError } = await supabaseClient
+  async function fetchProfile(userId) {
+    const { data: profile, error: lookupError } = await supabaseClient
       .from("profiles")
       .select("full_name, role")
       .eq("id", userId)
@@ -424,38 +453,13 @@
       throw new Error(lookupError.message);
     }
 
-    if (existingProfile) {
-      return existingProfile;
-    }
-
-    const fallbackName = (fullName || email?.split("@")[0] || "User").trim();
-    const fallbackRole = role && (role === "team_lead" || role === "manager") ? role : "team_lead";
-
-    const { data: createdProfile, error: insertError } = await supabaseClient
-      .from("profiles")
-      .upsert({
-        id: userId,
-        full_name: fallbackName,
-        role: fallbackRole,
-      }, { onConflict: "id" })
-      .select("full_name, role")
-      .single();
-
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
-
-    return createdProfile;
+    if (!profile) throw new Error("Profile not found");
+    return profile;
   }
 
-  async function loadProfileAndRender(userId, email, userMeta = {}) {
+  async function loadProfileAndRender(userId, email) {
     try {
-      const profile = await ensureProfileExists(
-        userId,
-        userMeta.full_name || userMeta.name || null,
-        userMeta.role || null,
-        email
-      );
+      const profile = await fetchProfile(userId);
 
       currentProfile = { ...profile, id: userId, email };
       el("userBadge").textContent = `${profile.full_name} (${profile.role})`;
@@ -463,10 +467,8 @@
 
       if (profile.role === "team_lead") {
         el("teamLeadView").classList.remove("hidden");
-        el("managerDacsView").classList.remove("hidden");
         el("personName").value = profile.full_name;
         await loadMyUploads();
-        await loadDacs();
       } else if (profile.role === "manager") {
         el("teamLeadView").classList.remove("hidden");
         el("managerView").classList.remove("hidden");
@@ -478,7 +480,7 @@
       }
     } catch (err) {
       console.error("Profile lookup failed:", err);
-      el("loginError").textContent = "No profile found for this account. Ask your manager to add you or recreate the account.";
+      el("loginError").textContent = "No approved profile found for this account. Ask your manager to add you.";
       showLogin();
     }
   }
@@ -496,66 +498,7 @@
         el("loginError").textContent = error.message;
         return;
       }
-      await loadProfileAndRender(data.user.id, data.user.email, data.user.user_metadata || {});
-    } finally {
-      setButtonLoading(button, false);
-    }
-  });
-
-  el("showSignUpBtn").addEventListener("click", () => {
-    el("signUpBlock").classList.remove("hidden");
-    el("authStatus").textContent = "";
-    el("loginError").textContent = "";
-  });
-
-  el("signUpBtn").addEventListener("click", async (event) => {
-    const button = event.currentTarget;
-    el("signUpStatus").textContent = "";
-    const fullName = el("signUpName").value.trim();
-    const email = el("signUpEmail").value.trim();
-    const password = el("signUpPassword").value;
-    const role = el("signUpRole").value;
-
-    if (!fullName || !email || !password) {
-      el("signUpStatus").textContent = "Please fill in your full name, email, and password.";
-      el("signUpStatus").className = "status-error";
-      return;
-    }
-
-    if (password.length < 6) {
-      el("signUpStatus").textContent = "Password must be at least 6 characters.";
-      el("signUpStatus").className = "status-error";
-      return;
-    }
-
-    setButtonLoading(button, true, "Creating...");
-    try {
-      const { data, error } = await supabaseClient.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role,
-          },
-        },
-      });
-
-      if (error) {
-        el("signUpStatus").textContent = error.message;
-        el("signUpStatus").className = "status-error";
-        return;
-      }
-
-      if (data.user && !data.session) {
-        el("signUpStatus").textContent = "Account created. Check your email to confirm your registration, then sign in.";
-        el("signUpStatus").className = "status-ok";
-        return;
-      }
-
-      el("signUpStatus").textContent = "Account created successfully.";
-      el("signUpStatus").className = "status-ok";
-      await loadProfileAndRender(data.user.id, data.user.email, data.user.user_metadata || {});
+      await loadProfileAndRender(data.user.id, data.user.email);
     } finally {
       setButtonLoading(button, false);
     }
@@ -563,7 +506,7 @@
 
   el("forgotPasswordBtn").addEventListener("click", async (event) => {
     const button = event.currentTarget;
-    const email = el("email").value.trim() || el("signUpEmail").value.trim();
+    const email = el("email").value.trim();
     if (!email) {
       el("authStatus").textContent = "Enter your email above, then click Forgot password.";
       el("authStatus").className = "status-error";
@@ -734,6 +677,10 @@
   }
 
   el("logoutBtn")?.addEventListener("click", logout);
+
+  el("deleteAllReportsBtn")?.addEventListener("click", (event) => {
+    deleteAllReports(event.currentTarget);
+  });
 
   el("generateBtn")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
