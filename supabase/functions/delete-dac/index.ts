@@ -1,5 +1,5 @@
 // Deletes a generated DAC record and its stored DOCX.
-// Managers can delete generated DACs.
+// Approved users can delete generated DACs.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -44,8 +44,8 @@ Deno.serve(async (req) => {
       .eq("id", userData.user.id)
       .single();
 
-    if (profileError || !profile || profile.role !== "manager") {
-      return new Response(JSON.stringify({ ok: false, error: "Only managers can delete generated DACs" }), {
+    if (profileError || !profile || !["manager", "team_lead"].includes(profile.role)) {
+      return new Response(JSON.stringify({ ok: false, error: "Only approved users can delete generated DACs" }), {
         status: 403,
         headers: corsHeaders,
       });

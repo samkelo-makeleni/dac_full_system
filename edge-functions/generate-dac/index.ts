@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
     // --- Authorization ---
     // Allowed callers: (a) pg_cron, which calls with the service role key
     // in the Authorization header, or (b) a logged-in user with role
-    // 'manager', identified via their own JWT (sent by the frontend).
+    // 'manager' or 'team_lead', identified via their own JWT (sent by the frontend).
     const authHeader = req.headers.get("Authorization") ?? "";
     const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
 
@@ -188,8 +188,8 @@ Deno.serve(async (req) => {
         .select("role")
         .eq("id", userData.user.id)
         .single();
-      if (!profile || profile.role !== "manager") {
-        return new Response(JSON.stringify({ ok: false, error: "Only managers can trigger DAC generation" }), { status: 403, headers: corsHeaders });
+      if (!profile || !["manager", "team_lead"].includes(profile.role)) {
+        return new Response(JSON.stringify({ ok: false, error: "Only approved users can trigger DAC generation" }), { status: 403, headers: corsHeaders });
       }
     }
 

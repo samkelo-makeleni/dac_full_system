@@ -82,18 +82,19 @@ create policy "authenticated team leads/managers can delete weekly reports"
 
 
 -- ---------------------------------------------------------------------
--- generated-dacs bucket — read-only for managers; only the
+-- generated-dacs bucket — read-only for approved users; only the
 -- generate-dac edge function (service role key) writes here.
 -- ---------------------------------------------------------------------
 drop policy if exists "authenticated users can read generated dacs" on storage.objects;
 drop policy if exists "managers can read generated dacs" on storage.objects;
+drop policy if exists "approved users can read generated dacs" on storage.objects;
 
-create policy "managers can read generated dacs"
+create policy "approved users can read generated dacs"
   on storage.objects for select
   using (
     bucket_id = 'generated-dacs'
     and exists (
       select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'manager'
+      where p.id = auth.uid() and p.role in ('team_lead', 'manager')
     )
   );

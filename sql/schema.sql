@@ -158,12 +158,12 @@ alter table public.generated_dacs enable row level security;
 drop policy if exists "managers and team leads can read generated dacs" on public.generated_dacs;
 drop policy if exists "managers can read generated dacs" on public.generated_dacs;
 
-create policy "managers can read generated dacs"
+create policy "managers and team leads can read generated dacs"
   on public.generated_dacs for select
   using (
     exists (
       select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'manager'
+      where p.id = auth.uid() and p.role in ('team_lead', 'manager')
     )
   );
 

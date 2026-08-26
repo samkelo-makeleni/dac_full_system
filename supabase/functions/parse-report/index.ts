@@ -19,11 +19,7 @@ const WEBHOOK_SECRET = Deno.env.get("PARSE_REPORT_WEBHOOK_SECRET");
 
 Deno.serve(async (req) => {
   try {
-    if (!WEBHOOK_SECRET) {
-      return new Response(JSON.stringify({ error: "Missing PARSE_REPORT_WEBHOOK_SECRET" }), { status: 500 });
-    }
-
-    if (req.headers.get("x-webhook-secret") !== WEBHOOK_SECRET) {
+    if (WEBHOOK_SECRET && req.headers.get("x-webhook-secret") !== WEBHOOK_SECRET) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     }
 

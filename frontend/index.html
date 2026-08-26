@@ -465,11 +465,7 @@
       el("userBadge").textContent = `${profile.full_name} (${profile.role})`;
       el("loginView").classList.add("hidden");
 
-      if (profile.role === "team_lead") {
-        el("teamLeadView").classList.remove("hidden");
-        el("personName").value = profile.full_name;
-        await loadMyUploads();
-      } else if (profile.role === "manager") {
+      if (["team_lead", "manager"].includes(profile.role)) {
         el("teamLeadView").classList.remove("hidden");
         el("managerView").classList.remove("hidden");
         el("managerDacsView").classList.remove("hidden");

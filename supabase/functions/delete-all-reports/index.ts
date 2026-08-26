@@ -1,5 +1,5 @@
 // Deletes all weekly reports and their stored DOCX files.
-// Managers only.
+// Approved users only.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -36,8 +36,8 @@ Deno.serve(async (req) => {
       .eq("id", userData.user.id)
       .single();
 
-    if (profileError || !profile || profile.role !== "manager") {
-      return new Response(JSON.stringify({ ok: false, error: "Only managers can delete all reports" }), {
+    if (profileError || !profile || !["manager", "team_lead"].includes(profile.role)) {
+      return new Response(JSON.stringify({ ok: false, error: "Only approved users can delete all reports" }), {
         status: 403,
         headers: corsHeaders,
       });
