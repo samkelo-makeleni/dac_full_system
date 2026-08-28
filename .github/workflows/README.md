@@ -19,5 +19,6 @@ The Supabase function runtime secrets still need to be configured in Supabase:
 - `DAC_MANAGER_EMAIL`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
+- `APPROVAL_WEBHOOK_SECRET` if you use the `notify-user-approved` SQL trigger.
 
 For GitHub Pages, set the repository Pages source to `GitHub Actions`.
