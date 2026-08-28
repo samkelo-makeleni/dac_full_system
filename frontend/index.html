@@ -15,6 +15,8 @@
   body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: var(--bg); color: #222; }
   header { background: var(--teal); color: white; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
   header h1 { font-size: 1.1rem; margin: 0; }
+  .brand { display: flex; align-items: center; gap: 0.75rem; }
+  .brand-logo { width: 76px; height: auto; display: block; background: white; border-radius: 4px; padding: 0.2rem; }
   main { max-width: 780px; margin: 2rem auto; padding: 0 1rem; }
   .card { background: white; border: 1px solid var(--grey); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
   label { display: block; font-weight: 600; margin-bottom: 0.3rem; margin-top: 1rem; }
@@ -53,7 +55,10 @@
 <body>
 
 <header>
-  <h1>Falcorp DAC Portal — Telkom CSB IT</h1>
+  <div class="brand">
+    <img class="brand-logo" src="falcorp_logo.png" alt="Falcorp" />
+    <h1>Falcorp DAC Portal — Telkom CSB IT</h1>
+  </div>
   <div style="display:flex; align-items:center; gap:0.75rem;">
     <div id="userBadge"></div>
     <button id="logoutBtn" class="secondary" type="button" style="margin-top:0; padding:0.45rem 0.8rem;">Log out</button>

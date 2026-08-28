@@ -210,7 +210,7 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
       },
       footers: { default: new Footer({ children: footerParas() }) },
       children: [
-        new Paragraph({ children: [new ImageRun({ data: FALCORP_LOGO_BASE64, type: "png", transformation: { width: 170, height: 62 } })] }),
+        new Paragraph({ children: [new ImageRun({ data: FALCORP_LOGO_BASE64, type: "png", transformation: { width: 170, height: 124 } })] }),
         new Paragraph({ text: "" }),
         new Paragraph({ children: [new TextRun({ text: "Delivery Acceptance Certificate (DAC)", bold: true, size: 32 })], spacing: { after: 200 } }),
         infoTable,
