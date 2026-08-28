@@ -271,11 +271,34 @@ function parseGenericTable(html: string, headingText: string): string[][] {
   const dataRows = hasHeader ? rows.slice(1) : rows;
   const tableRows = dataRows
     .map((r) => r.map((c) => c.trim()))
-    .filter((r) => r.some((c) => c.length > 0));
+    .filter((r) => r.some((c) => c.length > 0))
+    .filter((row) => !isTemplateInstruction(row));
 
-  if (tableRows.length > 0) return tableRows;
+  if (tableRows.length > 0) return uniqueRows(tableRows);
 
-  return extractSectionContent(html, headingText).map((text) => [text]);
+  return uniqueRows(
+    extractSectionContent(html, headingText)
+      .map((text) => [text])
+      .filter((row) => !isTemplateInstruction(row)),
+  );
+}
+
+function isTemplateInstruction(row: string[]) {
+  const text = row.join(" ").toLowerCase().replace(/\s+/g, " ").trim();
+  return text.includes("reporting key issues and risks early shows value") ||
+    text.includes("include impact if not resolved") ||
+    text.includes("briefly describe any improvements or innovations you contributed") ||
+    text.includes("area may be process efficiency, client experience, team collaboration");
+}
+
+function uniqueRows(rows: string[][]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = row.map((cell) => cell.toLowerCase().replace(/\s+/g, " ").trim()).join("\u001f");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function parseWeeklyReportBuffer(

@@ -77,12 +77,15 @@ Repeat for everyone who needs access.
    mkdir -p supabase/functions
    cp -r edge-functions/parse-report supabase/functions/
    cp -r edge-functions/generate-dac supabase/functions/
+   cp -r edge-functions/approve-user supabase/functions/
+   cp -r edge-functions/notify-user-approved supabase/functions/
    cp -r edge-functions/_shared supabase/functions/_shared
    ```
 3. Set the secrets the functions need:
    ```
    supabase secrets set RESEND_API_KEY=re_your-real-resend-key-here
    supabase secrets set DAC_EMAIL_FROM="Falcorp DAC Portal <samkelo.makeleni@falcorp.co.za>"
+   supabase secrets set DAC_PORTAL_URL="https://samkelo-makeleni.github.io/dac_full_system/"
    supabase secrets set DAC_MANAGER_EMAIL="lrouxe1@telkom.co.za,samkelo.makeleni@falcorp.co.za"
    supabase secrets set OPENAI_API_KEY=sk-your-openai-key-here
    supabase secrets set OPENAI_MODEL=gpt-5
@@ -97,11 +100,47 @@ Repeat for everyone who needs access.
    supabase functions deploy delete-report --no-verify-jwt
    supabase functions deploy delete-all-reports --no-verify-jwt
    supabase functions deploy delete-dac --no-verify-jwt
+   supabase functions deploy approve-user --no-verify-jwt
+   supabase functions deploy notify-user-approved --no-verify-jwt
    ```
+
+The approval function verifies that the caller is a manager, updates the user's
+`profiles` row, and sends the approval email through Resend. The email settings
+must be configured before approving users; an approval request reports an email
+failure instead of silently returning success.
 
 ---
 
-## 5. Wire up automatic parsing (Database Webhook)
+## 5. Set up user approval notifications
+
+To notify users when a manager approves them directly in the Supabase SQL
+Editor, replace `YOUR-SERVICE-ROLE-KEY` in `sql/notify_user_approved.sql` with
+the project's service-role key, then run that SQL in the Supabase SQL Editor.
+Never place the service-role key in the frontend or commit the edited SQL file.
+
+The SQL installs an `after insert or update` trigger on `public.profiles` that
+calls the deployed `notify-user-approved` function. For portal approvals, use
+the deployed `approve-user` function so the manager authorization check and
+email result are returned to the portal.
+
+Verify that the trigger is installed and active with:
+
+```sql
+select trigger_name, event_manipulation, action_statement
+from information_schema.triggers
+where event_object_schema = 'public'
+   and event_object_table = 'profiles'
+   and trigger_name = 'on_profile_approved';
+```
+
+If this returns no rows, rerun `sql/notify_user_approved.sql`. If it returns a
+row but emails are still missing, check **Edge Functions → notify-user-approved
+→ Logs** and confirm that the SQL script used the real service-role key rather
+than `YOUR-SERVICE-ROLE-KEY`.
+
+---
+
+## 6. Wire up automatic parsing (Database Webhook)
 
 1. Dashboard → **Database → Webhooks → Create a new hook**.
 2. Table: `weekly_reports`. Events: `Insert`.
@@ -113,7 +152,7 @@ Now every new row in `weekly_reports` (i.e. every upload) automatically triggers
 
 ---
 
-## 6. Schedule the monthly generation (pg_cron)
+## 7. Schedule the monthly generation (pg_cron)
 
 1. Dashboard → **Database → Extensions** → enable `pg_cron` and `pg_net` (or just run the `create extension` lines in `sql/schedule_cron.sql`).
 2. Open `sql/schedule_cron.sql`, replace the two placeholders:
