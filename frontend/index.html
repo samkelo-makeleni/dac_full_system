@@ -50,6 +50,27 @@
   .file-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
   .table-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .table-actions button { white-space: nowrap; }
+  .footer-nav {
+    background: #163f52;
+    color: white;
+    padding: 1rem 1.5rem;
+    margin-top: 2rem;
+  }
+  .footer-nav-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+  .footer-nav strong { display: block; margin-bottom: 0.35rem; }
+  .footer-nav p { margin: 0.2rem 0; font-size: 0.85rem; color: #dbeaf0; }
+  .footer-nav a { color: white; font-weight: 600; text-decoration: none; }
+  @media (max-width: 640px) {
+    header { align-items: flex-start; flex-direction: column; gap: 0.75rem; }
+    .footer-nav-inner { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -142,6 +163,21 @@
   </section>
 
 </main>
+
+<footer class="footer-nav">
+  <div class="footer-nav-inner">
+    <div>
+      <strong>Falcorp Technologies (Pty) Ltd</strong>
+      <p>Directors: Rikash Hurdeen | Peter Temane</p>
+      <p>Reg No: 2008/019954/07 | VAT No: 4520203060</p>
+    </div>
+    <div>
+      <p>Ground Floor, Block D | 676 On Gallagher | Gallagher Avenue | Halfway House | Midrand | 1686</p>
+      <p>PO Box 7094 | Halfway House | Midrand | 1685</p>
+      <p>t: 87 135 3698 | f: 011 805 6315 | <a href="https://www.falcorp.co.za" target="_blank" rel="noopener">www.falcorp.co.za</a></p>
+    </div>
+  </div>
+</footer>
 
 <script>
   // ---- Supabase project config ----
