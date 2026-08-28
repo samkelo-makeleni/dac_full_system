@@ -51,25 +51,42 @@
   .table-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .table-actions button { white-space: nowrap; }
   .footer-nav {
-    background: #163f52;
+    background: #123f52;
     color: white;
-    padding: 1rem 1.5rem;
-    margin-top: 2rem;
+    padding: 1.5rem 1.5rem 1rem;
+    margin-top: 2.5rem;
+    border-top: 4px solid #2d8cad;
+    box-shadow: 0 -12px 28px rgba(31, 110, 140, 0.08);
   }
   .footer-nav-inner {
-    max-width: 980px;
+    max-width: 1080px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 1.2fr 1fr;
-    gap: 1rem;
+    grid-template-columns: 1.35fr 0.9fr 1.25fr;
+    gap: 1.25rem;
     align-items: start;
   }
-  .footer-nav strong { display: block; margin-bottom: 0.35rem; }
-  .footer-nav p { margin: 0.2rem 0; font-size: 0.85rem; color: #dbeaf0; }
-  .footer-nav a { color: white; font-weight: 600; text-decoration: none; }
+  .footer-brand-block { display: flex; align-items: flex-start; gap: 0.85rem; }
+  .footer-logo { width: 84px; height: auto; flex: 0 0 auto; display: block; background: white; border-radius: 6px; padding: 0.25rem; }
+  .footer-kicker { display: block; margin-bottom: 0.45rem; color: #91cfe3; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .footer-nav strong { display: block; margin-bottom: 0.35rem; color: #fff; font-size: 1rem; }
+  .footer-nav p { margin: 0.25rem 0; font-size: 0.86rem; line-height: 1.45; color: #dbeaf0; }
+  .footer-nav a { color: #fff; font-weight: 700; text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.35); text-underline-offset: 3px; }
+  .footer-nav a:hover { text-decoration-color: #fff; }
+  .footer-contact-line { margin-top: 0.5rem; }
+  .footer-bottom {
+    max-width: 1080px;
+    margin: 1rem auto 0;
+    padding-top: 0.8rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    color: #bdd7e1;
+    font-size: 0.78rem;
+  }
   @media (max-width: 640px) {
     header { align-items: flex-start; flex-direction: column; gap: 0.75rem; }
     .footer-nav-inner { grid-template-columns: 1fr; }
+    .footer-brand-block { flex-direction: column; }
+    .footer-logo { width: 76px; }
   }
 </style>
 </head>
@@ -166,20 +183,29 @@
 
 <footer class="footer-nav">
   <div class="footer-nav-inner">
-    <div>
-      <strong>Falcorp Technologies (Pty) Ltd</strong>
-      <p>Digital transformation partner focused on trust, accountability, innovation, and measurable business outcomes.</p>
-      <p>Directors: Rikash Hurdeen | Peter Temane</p>
-      <p>Reg No: 2008/019954/07 | VAT No: 4520203060</p>
-      <p><a href="https://falcorp.co.za/about/" target="_blank" rel="noopener">About Falcorp</a></p>
+    <div class="footer-brand-block">
+      <img class="footer-logo" src="falcorp_logo.png" alt="Falcorp" />
+      <div>
+        <strong>Falcorp Technologies (Pty) Ltd</strong>
+        <p>Digital transformation partner focused on trust, accountability, innovation, and measurable business outcomes.</p>
+        <p><a href="https://falcorp.co.za/about/" target="_blank" rel="noopener">About Falcorp</a></p>
+      </div>
     </div>
     <div>
-      <strong>Contact</strong>
-      <p>Address: 1004 First Floor, Building 3 Silver Stream Office Park, 10 Muswell Road South, Bryanston, Sandton, Gauteng, 2091</p>
-      <p>Email: <a href="mailto:info@falcorp.co.za">info@falcorp.co.za</a></p>
-      <p>Call: <a href="tel:+27871353698">+27 87 135 3698</a> | <a href="https://www.falcorp.co.za" target="_blank" rel="noopener">www.falcorp.co.za</a></p>
+      <span class="footer-kicker">Company</span>
+      <p>Directors: Rikash Hurdeen | Peter Temane</p>
+      <p>Reg No: 2008/019954/07</p>
+      <p>VAT No: 4520203060</p>
+    </div>
+    <div>
+      <span class="footer-kicker">Contact</span>
+      <p>1004 First Floor, Building 3 Silver Stream Office Park, 10 Muswell Road South, Bryanston, Sandton, Gauteng, 2091</p>
+      <p class="footer-contact-line">Email: <a href="mailto:info@falcorp.co.za">info@falcorp.co.za</a></p>
+      <p>Call: <a href="tel:+27871353698">+27 87 135 3698</a></p>
+      <p><a href="https://www.falcorp.co.za" target="_blank" rel="noopener">www.falcorp.co.za</a></p>
     </div>
   </div>
+  <div class="footer-bottom">&copy; 2026 Falcorp Technologies (Pty) Ltd. All rights reserved.</div>
 </footer>
 
 <script>
