@@ -6,7 +6,7 @@
 // deno-lint-ignore-file no-explicit-any
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  WidthType, ShadingType, HeadingLevel, AlignmentType, BorderStyle,
+  WidthType, ShadingType, AlignmentType, BorderStyle,
   ImageRun, LevelFormat, VerticalAlign, Footer,
 } from "npm:docx@9.6.1";
 import { FALCORP_LOGO_BASE64 } from "./logo_base64.ts";
@@ -121,7 +121,10 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
   }
 
   function h(text: string) {
-    return new Paragraph({ text, heading: HeadingLevel.HEADING_2, spacing: { before: 260, after: 120 } });
+    return new Paragraph({
+      spacing: { before: 260, after: 80 },
+      children: [new TextRun({ text, bold: true, size: 22 })],
+    });
   }
   function bullet(boldLead: string, rest: string) {
     return new Paragraph({
@@ -219,7 +222,6 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
         new Paragraph({ children: [new TextRun({ text: "Reporting Period: ", bold: true }), new TextRun({ text: data.reportingPeriod })] }),
         new Paragraph({ children: [new TextRun({ text: "Index of Topics", bold: true })], spacing: { before: 120 } }),
         ...indexItems.map((t) => plainBullet(t)),
-        new Paragraph({ text: "", pageBreakBefore: true }),
         ...bodyChildren,
         new Paragraph({ text: "", spacing: { before: 300 } }),
         sigTable(),

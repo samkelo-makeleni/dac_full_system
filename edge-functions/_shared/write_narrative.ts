@@ -28,7 +28,6 @@ const OPENAI_NARRATIVE_REQUIRED = "OPENAI_NARRATIVE_REQUIRED";
 const REQUIRED_SECTION_TITLES = [
   "Monthly Synopsis of Achievements",
   "Project Delivery",
-  "Project Team",
   "Project Summary",
   "Project Activities",
   "Issues and Risks Associated with Delivery",
@@ -43,8 +42,8 @@ function clean(value: unknown): string {
 }
 
 function compactPeopleData(peopleData: PersonMonth[]) {
-  return peopleData.map((person) => ({
-    name: clean(person.name),
+  return peopleData.map((person, index) => ({
+    contributorRef: `Team member ${index + 1}`,
     weeks: person.weeks.map((week) => ({
       weekStart: clean(week.weekStart),
       activities: (week.activities ?? []).map((activity) => ({
@@ -96,8 +95,86 @@ function unique(values: string[]) {
   return Array.from(new Set(values.map(clean).filter(Boolean)));
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function contributorNames(peopleData: PersonMonth[]) {
+  const names = unique(peopleData.map((person) => person.name));
+  const nameParts = names.flatMap((name) => name.split(/\s+/).filter((part) => part.length >= 3));
+  return unique([...names, ...nameParts])
+    .sort((a, b) => b.length - a.length);
+}
+
+function redactNamesFromText(text: string, names: string[]) {
+  let output = text;
+  for (const name of names) {
+    output = output.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, "gi"), "the delivery team");
+  }
+  return clean(output);
+}
+
+function redactContributorNames(sections: DacSection[], peopleData: PersonMonth[]) {
+  const names = contributorNames(peopleData);
+  if (!names.length) return sections;
+
+  return sections.map((section) => {
+    if (section.type === "paragraph") {
+      return { ...section, text: redactNamesFromText(section.text || "", names) };
+    }
+    if (section.type === "bulletsPlain") {
+      return { ...section, items: (section.items || []).map((item) => redactNamesFromText(String(item), names)) };
+    }
+    return {
+      ...section,
+      items: (section.items || []).map((item: any) => ({
+        lead: redactNamesFromText(item.lead, names),
+        text: redactNamesFromText(item.text, names),
+      })),
+    };
+  });
+}
+
 function rowText(row: string[]) {
   return clean(row.join(" - "));
+}
+
+function isTemplateInstruction(row: string[]) {
+  const text = row.join(" ").toLowerCase().replace(/\s+/g, " ").trim();
+  return text.includes("reporting key issues and risks early shows value") ||
+    text.includes("include impact if not resolved") ||
+    text.includes("briefly describe any improvements or innovations you contributed") ||
+    text.includes("area may be process efficiency, client experience, team collaboration");
+}
+
+function uniqueRows(rows: string[][]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = row.map(clean).join("\u001f").toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function sanitizePeopleData(peopleData: PersonMonth[]): PersonMonth[] {
+  return peopleData.map((person) => ({
+    ...person,
+    weeks: person.weeks.map((week) => ({
+      ...week,
+      activities: Array.from(new Map(
+        week.activities.map((activity) => [
+          JSON.stringify(activity),
+          activity,
+        ]),
+      ).values()),
+      risks: uniqueRows((week.risks ?? []).filter((row) => !isTemplateInstruction(row))),
+      knowledgeTransfer: uniqueRows(week.knowledgeTransfer ?? []),
+      continuousImprovement: uniqueRows((week.continuousImprovement ?? []).filter((row) => !isTemplateInstruction(row))),
+      continuousLearning: uniqueRows(week.continuousLearning ?? []),
+      aiEfficiency: uniqueRows(week.aiEfficiency ?? []),
+    })),
+  }));
 }
 
 function noFormalItems(section: string, reportingPeriod: string): DacSection {
@@ -110,12 +187,10 @@ function noFormalItems(section: string, reportingPeriod: string): DacSection {
 
 function buildFallbackNarrative(reportingPeriod: string, peopleData: PersonMonth[]): DacSection[] {
   const stats = sourceStats(peopleData);
-  const contributors = unique(peopleData.map((person) => person.name));
   const weekStarts = unique(peopleData.flatMap((person) => person.weeks.map((week) => week.weekStart))).sort();
   const activities = peopleData.flatMap((person) =>
     person.weeks.flatMap((week) =>
       (week.activities ?? []).map((activity) => ({
-        person: clean(person.name),
         weekStart: clean(week.weekStart),
         project: clean(activity.project),
         work: clean(activity.work || activity.notes),
@@ -124,68 +199,45 @@ function buildFallbackNarrative(reportingPeriod: string, peopleData: PersonMonth
   ).filter((activity) => activity.project || activity.work);
   const projects = unique(activities.map((activity) => activity.project || "General delivery"));
 
-  function activityItemsByPerson() {
-    return peopleData.flatMap((person) => {
-      const personName = clean(person.name) || "Unnamed contributor";
-      const personActivities = person.weeks.flatMap((week) =>
-        (week.activities ?? []).map((activity) => ({
-          weekStart: clean(week.weekStart),
-          project: clean(activity.project) || "General delivery",
-          work: clean(activity.work || activity.notes),
-        }))
-      ).filter((activity) => activity.project || activity.work);
+  function activityItemsByProject() {
+    if (!activities.length) {
+      return [{ lead: "Delivery activity", text: "No project activity rows were available in the parsed weekly reports." }];
+    }
 
-      if (personActivities.length === 0) {
-        return [{
-          lead: personName,
-          text: `No project activity rows were parsed from this team member's weekly reports for ${reportingPeriod}.`,
-        }];
-      }
-
-      const groupedProjects = unique(personActivities.map((activity) => activity.project)).slice(0, 6);
-      return groupedProjects.map((project) => {
-        const related = personActivities.filter((activity) => activity.project === project);
-        const weeks = unique(related.map((activity) => activity.weekStart)).sort();
-        const workItems = unique(related.map((activity) => activity.work)).slice(0, 5);
-        return {
-          lead: `${personName} - ${project}`,
-          text: [
-            weeks.length ? `Weeks: ${weeks.join(", ")}.` : "",
-            workItems.length ? workItems.join("; ") : "Delivery activity was recorded in the parsed weekly reports.",
-          ].filter(Boolean).join(" "),
-        };
-      });
+    return projects.slice(0, 8).map((project) => {
+      const related = activities.filter((activity) => (activity.project || "General delivery") === project);
+      const weeks = unique(related.map((activity) => activity.weekStart)).sort();
+      const workItems = unique(related.map((activity) => activity.work)).slice(0, 8);
+      return {
+        lead: project,
+        text: [
+          weeks.length ? `Weeks: ${weeks.join(", ")}.` : "",
+          workItems.length ? workItems.join("; ") : "Delivery activity was recorded in the parsed weekly reports.",
+        ].filter(Boolean).join(" "),
+      };
     });
   }
 
   function supportingSection(title: string, key: keyof PersonMonth["weeks"][number]): DacSection {
-    const items = peopleData.flatMap((person) => {
-      const personName = clean(person.name) || "Unnamed contributor";
-      const rows = person.weeks.flatMap((week) =>
+    const rows = peopleData.flatMap((person) =>
+      person.weeks.flatMap((week) =>
         ((week[key] as string[][] | undefined) ?? []).map((row) => ({
           weekStart: clean(week.weekStart),
           text: rowText(row),
         }))
-      ).filter((item) => item.text);
+      )
+    ).filter((item) => item.text);
 
-      if (rows.length === 0) {
-        return [{
-          lead: personName,
-          text: `No formal ${title.toLowerCase()} items were parsed from this team member's weekly reports for ${reportingPeriod}.`,
-        }];
-      }
-
-      return rows.slice(0, 6).map((item) => ({
-        lead: personName,
-        text: [item.weekStart, item.text].filter(Boolean).join(" - "),
-      }));
-    });
-
-    if (items.length === 0) return noFormalItems(title, reportingPeriod);
+    if (rows.length === 0) return noFormalItems(title, reportingPeriod);
     return {
       title,
       type: "bulletsLead",
-      items,
+      items: unique(rows.map((item) => [item.weekStart, item.text].filter(Boolean).join(" - ")))
+        .slice(0, 10)
+        .map((text, index) => ({
+          lead: `${title} ${index + 1}`,
+          text,
+        })),
     };
   }
 
@@ -194,7 +246,7 @@ function buildFallbackNarrative(reportingPeriod: string, peopleData: PersonMonth
       title: "Monthly Synopsis of Achievements",
       type: "paragraph",
       text:
-        `For ${reportingPeriod}, ${contributors.length} contributor(s) submitted ${stats.weekCount} parsed weekly report(s), covering ${stats.activityCount} delivery activity item(s) and ${stats.supportingCount} supporting evidence item(s). This fallback narrative was generated directly from the parsed weekly report data because OpenAI narrative generation was unavailable.`,
+        `For ${reportingPeriod}, the Falcorp delivery team submitted ${stats.weekCount} parsed weekly report(s), covering ${stats.activityCount} delivery activity item(s) and ${stats.supportingCount} supporting evidence item(s). This narrative was generated directly from the parsed weekly report data because OpenAI narrative generation was unavailable.`,
     },
     {
       title: "Project Delivery",
@@ -203,31 +255,19 @@ function buildFallbackNarrative(reportingPeriod: string, peopleData: PersonMonth
         "Account / Client: Telkom CSB IT",
         `Focus Areas: ${projects.length ? projects.slice(0, 8).join(", ") : "Delivery activity captured in weekly reports"}`,
         `Reporting Period: ${reportingPeriod}${weekStarts.length ? ` (${weekStarts[0]} to ${weekStarts[weekStarts.length - 1]})` : ""}`,
-        `Contributors: ${contributors.length ? contributors.join(", ") : "No contributors identified"}`,
+        "Delivery Team: Falcorp project delivery team",
       ],
-    },
-    {
-      title: "Project Team",
-      type: "bulletsLead",
-      items: contributors.length
-        ? contributors.map((name) => ({
-          lead: name,
-          text: `Submitted parsed weekly delivery evidence for ${reportingPeriod}.`,
-        }))
-        : [{ lead: "Project team", text: "No named contributors were identified in the parsed weekly report data." }],
     },
     {
       title: "Project Summary",
       type: "paragraph",
       text:
-        `The monthly DAC evidence is based on ${stats.weekCount} parsed weekly report(s) from ${contributors.length} team member(s): ${contributors.join(", ") || "no named contributors"}. Activities and supporting evidence were reviewed per team member and retained from the source reports without additional interpretation.`,
+        `The reporting evidence shows delivery across ${projects.length ? projects.join(", ") : "the recorded project work"}. The detailed activities and supporting evidence below retain the source report content without additional interpretation.`,
     },
     {
       title: "Project Activities",
       type: "bulletsLead",
-      items: activities.length
-        ? activityItemsByPerson()
-        : [{ lead: "Delivery activity", text: "No project activity rows were available in the parsed weekly reports." }],
+      items: activityItemsByProject(),
     },
     supportingSection("Issues and Risks Associated with Delivery", "risks"),
     supportingSection("Knowledge and Skill Transfer", "knowledgeTransfer"),
@@ -252,14 +292,17 @@ function buildPrompt(reportingPeriod: string, peopleData: PersonMonth[]) {
     "You are writing a Falcorp / Telkom CSB Delivery Acceptance Certificate (DAC).",
     "",
     "Use the supplied parsed weekly delivery reports as the only source of truth.",
-    "Analyse each person's weekly reports, combine overlapping items, and write polished monthly DAC narrative like a human delivery manager.",
-    "You must inspect every person in peopleData. The DAC is for the full team, not a single contributor.",
-    "Every contributor with source rows must be represented in Project Team and in the relevant Project Activities or evidence sections.",
+    "Analyse all weekly reports, combine overlapping items, and write polished monthly DAC narrative like a human delivery manager.",
+    "The DAC is for the full delivery team, not a single contributor.",
+    "Do not mention individual contributor names anywhere in the DAC narrative.",
+    "Do not write who did what. Group work by project, delivery theme, system area, or outcome instead of by person.",
+    "Each section has a distinct purpose: Synopsis describes material monthly achievements and outcomes; Project Delivery contains account, focus areas, period, and team-level metadata; Project Summary gives a concise overall delivery conclusion; Project Activities contains the detailed work performed; evidence sections contain only their own source category.",
+    "Avoid repetition across sections. Do not repeat report counts, reporting dates, project names, or activity details merely to fill a section. Refer to details in another section only when needed for clarity, and use materially different wording and purpose.",
     "Do not write mechanical count-summary bullets such as 'Analysed 5 project activities...'.",
     "Do not invent projects, dates, tools, risks, outcomes, people, or training that are not supported by the source data.",
     "If a section has no source rows, write a short plain paragraph saying no formal items were logged for that section in the reporting period.",
-    "Retain all material details from the reports: project codes/names, work performed, meetings, testing, defects, releases, blockers, outcomes, learning, AI/tool usage, and named contributors.",
-    "Group related activity rows into coherent DAC bullets with strong lead labels. Mention contributors in the lead or body when useful.",
+    "Retain all material delivery details from the reports: project codes/names, work performed, meetings, testing, defects, releases, blockers, outcomes, learning, and AI/tool usage.",
+    "Group related activity rows into coherent DAC bullets with strong project or theme lead labels.",
     "Keep the language professional and close to the manual DAC examples: concise, specific, delivery-focused, and outcome-oriented.",
     "",
     "Return ONLY valid JSON. No markdown, no code fences, no commentary.",
@@ -273,11 +316,10 @@ function buildPrompt(reportingPeriod: string, peopleData: PersonMonth[]) {
     "",
     "Formatting rules:",
     "- Monthly Synopsis of Achievements: paragraph.",
-    "- Project Delivery: bulletsPlain with Account / Client, Focus Areas, Reporting Period, and Contributors.",
-    "- Project Team: bulletsLead by contributor or role/practice if evident.",
+    "- Project Delivery: bulletsPlain with Account / Client, Focus Areas, Reporting Period, and Delivery Team.",
     "- Project Summary: paragraph.",
-    "- Project Activities: bulletsLead grouped by contributor and delivery theme/project, not one bullet per raw row unless needed.",
-    "- Remaining evidence sections: paragraph only if the whole team has no source rows; otherwise bulletsLead grouped by contributor.",
+    "- Project Activities: bulletsLead grouped by delivery theme/project, not one bullet per raw row unless needed.",
+    "- Remaining evidence sections: paragraph only if the whole team has no source rows; otherwise bulletsLead grouped by topic/theme.",
     "- Do not include a Weekly Report Analysis section.",
     "- Keep bullet text complete enough that a reviewer can see what was delivered, but avoid raw table dumping.",
     "",
@@ -366,11 +408,12 @@ export async function writeMonthlyNarrative(
   reportingPeriod: string,
   peopleData: PersonMonth[],
 ): Promise<DacSection[]> {
+  peopleData = sanitizePeopleData(peopleData);
   const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
   if (!apiKey) {
     if (!shouldRequireOpenAiNarrative()) {
       console.warn("Missing OPENAI_API_KEY secret; using deterministic DAC narrative fallback");
-      return buildFallbackNarrative(reportingPeriod, peopleData);
+      return redactContributorNames(buildFallbackNarrative(reportingPeriod, peopleData), peopleData);
     }
     throw new Error("Missing OPENAI_API_KEY secret; DAC narrative generation requires OpenAI");
   }
@@ -411,12 +454,12 @@ export async function writeMonthlyNarrative(
     const responseText = extractResponseText(responseJson);
     if (!responseText) throw new Error("OpenAI returned an empty narrative response");
 
-    return validateSections(parseModelJson(responseText));
+    return redactContributorNames(validateSections(parseModelJson(responseText)), peopleData);
   } catch (err) {
     if (shouldRequireOpenAiNarrative()) {
       throw err;
     }
     console.warn(`Using deterministic DAC narrative fallback: ${String(err)}`);
-    return buildFallbackNarrative(reportingPeriod, peopleData);
+    return redactContributorNames(buildFallbackNarrative(reportingPeriod, peopleData), peopleData);
   }
 }
