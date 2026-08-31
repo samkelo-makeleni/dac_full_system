@@ -46,6 +46,28 @@ function uint8ArrayToBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
+function uniqueStrings(values: unknown[]) {
+  return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
+}
+
+async function loadProfileNamesById(supabase: any, userIds: string[]) {
+  const ids = uniqueStrings(userIds);
+  if (ids.length === 0) return new Map<string, string>();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", ids);
+
+  if (error) throw error;
+
+  return new Map((data ?? []).map((profile: any) => [profile.id, profile.full_name]));
+}
+
+function reportOwnerName(report: any, profileNamesById: Map<string, string>) {
+  return profileNamesById.get(report.uploaded_by) || report.person_name || "Unknown team lead";
+}
+
 async function emailDac(params: {
   reportingPeriod: string;
   fileName: string;
@@ -111,7 +133,6 @@ async function ensureReportParsed(supabase: any, report: any, forceReparse = fal
 
   try {
     const parsed = await parseWeeklyReportBuffer(await fileData.arrayBuffer(), report.storage_path);
-    const parsedPersonName = parsed.name?.trim();
     const entry = {
       activities: parsed.activities,
       risks: parsed.risks,
@@ -138,10 +159,8 @@ async function ensureReportParsed(supabase: any, report: any, forceReparse = fal
     await supabase.from("weekly_reports").update({
       parsed: true,
       parse_error: null,
-      ...(parsedPersonName ? { person_name: parsedPersonName } : {}),
     }).eq("id", report.id);
     report.parsed = true;
-    if (parsedPersonName) report.person_name = parsedPersonName;
     report.weekly_entries = [savedEntry ?? entry];
     return { ok: true, entry: savedEntry ?? entry };
   } catch (err) {
@@ -215,11 +234,12 @@ Deno.serve(async (req) => {
     const { data: reports, error: reportsError } = await supabase
       .from("weekly_reports")
       .select(`
-        id, person_name, week_start, storage_path, parsed, parse_error,
+        id, uploaded_by, person_name, week_start, storage_path, parsed, parse_error,
         weekly_entries ( ${WEEKLY_ENTRY_COLUMNS} )
       `)
       .gte("week_start", startStr)
-      .lte("week_start", endStr);
+      .lte("week_start", endStr)
+      .order("week_start", { ascending: true });
 
     if (reportsError) throw reportsError;
 
@@ -230,12 +250,17 @@ Deno.serve(async (req) => {
       );
     }
 
+    const profileNamesById = await loadProfileNamesById(
+      supabase,
+      (reports as any[]).map((report) => report.uploaded_by),
+    );
+
     const parseFailures: any[] = [];
     for (const report of reports as any[]) {
       const parsedResult = await ensureReportParsed(supabase, report, forceReparse);
       if (!parsedResult.ok) {
         parseFailures.push({
-          personName: report.person_name,
+          personName: reportOwnerName(report, profileNamesById),
           weekStart: report.week_start,
           error: parsedResult.error,
         });
@@ -264,7 +289,7 @@ Deno.serve(async (req) => {
           ok: false,
           message: `${pendingReports.length} weekly report(s) for ${label} are still pending parsing. Generate the DAC after all reports show Parsed.`,
           pendingReports: pendingReports.map((r) => ({
-            personName: r.person_name,
+            personName: reportOwnerName(r, profileNamesById),
             weekStart: r.week_start,
           })),
         }),
@@ -272,15 +297,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Group by person
+    // 2. Group by the approved uploader profile. The uploaded_by id is the
+    // source of truth; names inside DOCX templates are often copied forward.
     const byPerson = new Map<string, PersonMonth>();
     for (const r of reports as any[]) {
       const entry = Array.isArray(r.weekly_entries) ? r.weekly_entries[0] : r.weekly_entries;
       if (!entry) continue; // not parsed yet — skipped for this run
-      if (!byPerson.has(r.person_name)) {
-        byPerson.set(r.person_name, { name: r.person_name, weeks: [] });
+      const ownerKey = r.uploaded_by || r.person_name || r.id;
+      const ownerName = reportOwnerName(r, profileNamesById);
+      if (!byPerson.has(ownerKey)) {
+        byPerson.set(ownerKey, { name: ownerName, weeks: [] });
       }
-      byPerson.get(r.person_name)!.weeks.push({
+      byPerson.get(ownerKey)!.weeks.push({
         weekStart: r.week_start,
         activities: entry.activities ?? [],
         risks: entry.risks ?? [],

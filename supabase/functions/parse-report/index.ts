@@ -72,7 +72,6 @@ async function parseAndStoreReport(supabase: any, record: any) {
   }
 
   const parsed = await parseWeeklyReportBuffer(await fileData.arrayBuffer(), record.storage_path);
-  const parsedPersonName = parsed.name?.trim();
   const entry = {
     activities: parsed.activities,
     risks: parsed.risks,
@@ -114,11 +113,10 @@ async function parseAndStoreReport(supabase: any, record: any) {
     .update({
       parsed: true,
       parse_error: null,
-      ...(parsedPersonName ? { person_name: parsedPersonName } : {}),
     })
     .eq("id", record.id);
 
-  return { ok: true, personName: parsedPersonName, activities: parsed.activities.length };
+  return { ok: true, activities: parsed.activities.length };
 }
 
 Deno.serve(async (req) => {
