@@ -61,7 +61,9 @@ async function loadProfileNamesById(supabase: any, userIds: string[]) {
 
   if (error) throw error;
 
-  return new Map((data ?? []).map((profile: any) => [profile.id, profile.full_name]));
+  return new Map<string, string>(
+    (data ?? []).map((profile: any): [string, string] => [String(profile.id), String(profile.full_name ?? "")]),
+  );
 }
 
 function reportOwnerName(report: any, profileNamesById: Map<string, string>) {
