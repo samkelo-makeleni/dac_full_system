@@ -5,7 +5,7 @@ export interface PersonMonth {
   name: string;
   weeks: {
     weekStart: string;
-    activities: { day: string; project: string; hours: string; work: string; notes: string }[];
+    activities: { day: string; project: string; hours: string; work: string; notes: string; details?: string[] }[];
     risks: string[][];
     knowledgeTransfer: string[][];
     continuousImprovement: string[][];
@@ -52,7 +52,8 @@ function compactPeopleData(peopleData: PersonMonth[]) {
         hours: clean(activity.hours),
         work: clean(activity.work),
         notes: clean(activity.notes),
-      })).filter((activity) => activity.project || activity.work || activity.notes),
+        details: unique(activity.details ?? []),
+      })).filter((activity) => activity.project || activity.work || activity.notes || activity.details.length),
       risks: cleanRows(week.risks),
       knowledgeTransfer: cleanRows(week.knowledgeTransfer),
       continuousImprovement: cleanRows(week.continuousImprovement),
@@ -191,10 +192,14 @@ function buildFallbackNarrative(reportingPeriod: string, peopleData: PersonMonth
   const activities = peopleData.flatMap((person) =>
     person.weeks.flatMap((week) =>
       (week.activities ?? []).map((activity) => ({
-        weekStart: clean(week.weekStart),
-        project: clean(activity.project),
-        work: clean(activity.work || activity.notes),
-      }))
+          weekStart: clean(week.weekStart),
+          project: clean(activity.project),
+          work: clean([
+            activity.work,
+            activity.notes,
+            ...(activity.details ?? []),
+          ].filter(Boolean).join(" - ")),
+        }))
     )
   ).filter((activity) => activity.project || activity.work);
   const projects = unique(activities.map((activity) => activity.project || "General delivery"));

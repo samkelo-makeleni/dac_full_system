@@ -17,6 +17,7 @@ export interface Activity {
   hours: string;
   work: string;
   notes: string;
+  details?: string[];
 }
 
 export interface ParsedWeeklyReport {
@@ -97,6 +98,19 @@ function sectionAliases(headingText: string): string[] {
   return aliases[headingText] ?? [headingText];
 }
 
+const KNOWN_SECTION_TITLES = [
+  "Project Activities",
+  "Project Risks/Issues",
+  "Knowledge and Skill Transfer",
+  "Continuous Improvements and Value Add",
+  "Continuous Learning",
+  "AI & Efficiency Enhancements",
+];
+
+const KNOWN_SECTION_ALIASES = new Set(
+  KNOWN_SECTION_TITLES.flatMap((title) => sectionAliases(title).map(normalizeHeading)),
+);
+
 function headingMatches(text: string, wanted: Set<string>): boolean {
   if (!text) return false;
   for (const candidate of wanted) {
@@ -105,6 +119,10 @@ function headingMatches(text: string, wanted: Set<string>): boolean {
     }
   }
   return false;
+}
+
+function isKnownSectionHeading(text: string): boolean {
+  return headingMatches(text, KNOWN_SECTION_ALIASES);
 }
 
 function extractSectionTable(html: string, headingText: string): string | null {
@@ -153,8 +171,8 @@ function extractSectionContent(html: string, headingText: string): string[] {
 
     if (!foundHeading) continue;
 
-    if ((tag === "h1" || tag === "h2") && values.length > 0) break;
-    if (tag === "table") break;
+    if (((tag === "h1" || tag === "h2") || isKnownSectionHeading(normalizedText)) && values.length > 0) break;
+    if (tag === "table") continue;
 
     if (text) values.push(text);
   }
@@ -211,7 +229,10 @@ function composePersonName(firstName: string | null, surname: string | null): st
 function parseActivities(html: string): Activity[] {
   const table = extractSectionTable(html, "Project Activities") ?? findActivityTable(html);
   const rows = parseRows(table);
-  if (!rows.length) return [];
+  const sectionTextRows = extractSectionContent(html, "Project Activities")
+    .map((text) => ({ day: "", project: "General delivery", hours: "", work: text, notes: "" }))
+    .filter((activity) => !isTemplateInstruction([activity.work]));
+  if (!rows.length) return uniqueActivities(sectionTextRows);
   const header = rows[0].map(normalizeHeading);
   const isHeaderRow = header.some((h) => h === "day" || h === "date") &&
     header.some((h) => h.includes("project") || h.includes("activity") || h.includes("work"));
@@ -220,32 +241,64 @@ function parseActivities(html: string): Activity[] {
   const activities: Activity[] = [];
   let lastDay = "";
   for (const r of dataRows) {
-    let day: string, project: string, hours: string, work: string, notes: string;
+    let day: string, project: string, hours: string, work: string, notes: string, details: string[] = [];
     if (isHeaderRow) {
       day = cellByHeader(r, header, ["day", "date"]) || lastDay;
       project = cellByHeader(r, header, ["project", "system", "application", "client"]) || "";
       hours = cellByHeader(r, header, ["hours", "hrs", "time"]) || "";
       work = cellByHeader(r, header, ["work", "activity", "activities", "task", "description", "deliverable"]) || "";
       notes = cellByHeader(r, header, ["notes", "comments", "status", "outcome"]) || "";
+      details = extraCellsByHeader(r, header, [
+        "day", "date", "project", "system", "application", "client", "hours", "hrs", "time",
+        "work", "activity", "activities", "task", "description", "deliverable", "notes", "comments", "status", "outcome",
+      ]);
       lastDay = day || lastDay;
     } else if (r.length >= 5) {
       [day, project, hours, work, notes] = r;
+      details = r.slice(5).map((cell) => cell.trim()).filter(Boolean);
       lastDay = day || lastDay;
     } else if (r.length === 4) {
       [project, hours, work, notes] = r;
       day = lastDay;
+    } else if (r.length === 3) {
+      [project, work, notes] = r;
+      day = lastDay;
+      hours = "";
+    } else if (r.length === 2) {
+      [project, work] = r;
+      day = lastDay;
+      hours = "";
+      notes = "";
+    } else if (r.length === 1) {
+      day = lastDay;
+      project = "General delivery";
+      hours = "";
+      work = r[0];
+      notes = "";
     } else {
       continue;
     }
+    if (isTemplateInstruction(r)) continue;
     if (!project && !work && !notes) continue; // blank Sat/Sun filler rows
-    activities.push({ day, project, hours, work, notes });
+    activities.push({ day, project, hours, work, notes, ...(details.length ? { details } : {}) });
   }
-  return activities;
+  return uniqueActivities([...activities, ...sectionTextRows]);
 }
 
 function cellByHeader(row: string[], header: string[], aliases: string[]) {
   const index = header.findIndex((h) => aliases.some((alias) => h === alias || h.includes(alias)));
   return index >= 0 ? row[index] ?? "" : "";
+}
+
+function extraCellsByHeader(row: string[], header: string[], mappedAliases: string[]) {
+  return row
+    .map((cell, index) => {
+      const value = cell.trim();
+      const label = header[index] || `column ${index + 1}`;
+      const mapped = mappedAliases.some((alias) => label === alias || label.includes(alias));
+      return value && !mapped ? `${cleanHeading(label)}: ${value}` : "";
+    })
+    .filter(Boolean);
 }
 
 function findActivityTable(html: string): string | null {
@@ -268,19 +321,27 @@ function parseGenericTable(html: string, headingText: string): string[][] {
   const hasHeader = rows.length > 1 && rows[0].some((cell) =>
     /description|details?|item|risk|issue|action|learning|improvement|value|efficiency|status|owner|date/i.test(cell)
   );
-  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const header = hasHeader ? rows[0].map(cleanHeading) : [];
+  const dataRows = hasHeader ? rows.slice(1).map((row) => labelRowCells(row, header)) : rows;
   const tableRows = dataRows
     .map((r) => r.map((c) => c.trim()))
     .filter((r) => r.some((c) => c.length > 0))
     .filter((row) => !isTemplateInstruction(row));
 
-  if (tableRows.length > 0) return uniqueRows(tableRows);
+  const textRows = extractSectionContent(html, headingText)
+    .map((text) => [text])
+    .filter((row) => !isTemplateInstruction(row));
 
-  return uniqueRows(
-    extractSectionContent(html, headingText)
-      .map((text) => [text])
-      .filter((row) => !isTemplateInstruction(row)),
-  );
+  return uniqueRows([...tableRows, ...textRows]);
+}
+
+function labelRowCells(row: string[], header: string[]) {
+  return row.map((cell, index) => {
+    const value = cell.trim();
+    if (!value) return "";
+    const label = header[index]?.replace(/:$/, "").trim();
+    return label ? `${label}: ${value}` : value;
+  });
 }
 
 function isTemplateInstruction(row: string[]) {
@@ -295,6 +356,23 @@ function uniqueRows(rows: string[][]) {
   const seen = new Set<string>();
   return rows.filter((row) => {
     const key = row.map((cell) => cell.toLowerCase().replace(/\s+/g, " ").trim()).join("\u001f");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function uniqueActivities(activities: Activity[]) {
+  const seen = new Set<string>();
+  return activities.filter((activity) => {
+    const key = [
+      activity.day,
+      activity.project,
+      activity.hours,
+      activity.work,
+      activity.notes,
+      ...(activity.details ?? []),
+    ].map((value) => value.toLowerCase().replace(/\s+/g, " ").trim()).join("\u001f");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
