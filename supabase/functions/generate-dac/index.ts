@@ -50,6 +50,23 @@ function uniqueStrings(values: unknown[]) {
   return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
 }
 
+function serializeError(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (typeof value === "string") return value.trim() || "Unknown error";
+  if (value && typeof value === "object") {
+    const candidate = value as any;
+    if (typeof candidate.message === "string" && candidate.message.trim()) return candidate.message;
+    if (typeof candidate.error === "string" && candidate.error.trim()) return candidate.error;
+    if (typeof candidate.details === "string" && candidate.details.trim()) return candidate.details;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return Object.prototype.toString.call(value);
+    }
+  }
+  return String(value ?? "Unknown error");
+}
+
 async function loadProfileNamesById(supabase: any, userIds: string[]) {
   const ids = uniqueStrings(userIds);
   if (ids.length === 0) return new Map<string, string>();
@@ -172,6 +189,23 @@ async function ensureReportParsed(supabase: any, report: any, forceReparse = fal
   }
 }
 
+const DAC_AREA_OPTIONS = [
+  "DEV DAC",
+  "System Analysis DAC",
+  "PM DAC",
+  "SQA DAC",
+  "DEV 2 DAC",
+  "ADBA DAC",
+  "OPS DAC",
+  "SharePoint DAC",
+] as const;
+
+function resolveDacAreaName(value?: string) {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "Project Management";
+  return DAC_AREA_OPTIONS.includes(normalized as (typeof DAC_AREA_OPTIONS)[number]) ? normalized : normalized;
+}
+
 function monthBounds(periodStartOverride?: string) {
   const now = periodStartOverride ? new Date(periodStartOverride) : new Date();
   // Default: previous calendar month relative to "now"
@@ -219,10 +253,12 @@ Deno.serve(async (req) => {
 
     let periodStartOverride: string | undefined;
     let forceReparse = false;
+    let dacArea = "Project Management";
     try {
       const body = await req.json();
       periodStartOverride = body?.periodStart;
       forceReparse = body?.forceReparse === true;
+      dacArea = resolveDacAreaName(body?.dacArea ?? body?.area ?? body?.dac_area);
     } catch {
       // no body — fine, use default (previous month)
     }
@@ -336,6 +372,7 @@ Deno.serve(async (req) => {
     // 4. Assemble the full DAC data object
     const dacData: DacData = {
       ...DAC_CONFIG,
+      description: dacArea,
       reportingPeriod: label,
       sections,
     };
@@ -344,7 +381,8 @@ Deno.serve(async (req) => {
     const docBytes = await buildDac(dacData);
 
     // 6. Upload to storage
-    const fileName = `DAC_TELCOM-IT_PM_-_${label.replace(/\s+/g, "_").toUpperCase()}.docx`;
+    const areaToken = dacArea.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "PM";
+    const fileName = `DAC_TELCOM-IT_${areaToken}_${label.replace(/\s+/g, "_").toUpperCase()}.docx`;
     const storagePath = `${start.getUTCFullYear()}/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -362,6 +400,8 @@ Deno.serve(async (req) => {
       reporting_period: label,
       period_start: startStr,
       period_end: endStr,
+      dac_area: dacArea,
+      description: dacArea,
       storage_path: storagePath,
       generated_by: "automated",
       generated_at: new Date().toISOString(),
@@ -405,6 +445,7 @@ Deno.serve(async (req) => {
         ok: true,
         dacId: dacRecord?.id ?? null,
         reportingPeriod: label,
+        dacArea,
         storagePath,
         downloadUrl: signedUrlData?.signedUrl ?? null,
         emailSent: emailResult.sent,
@@ -415,7 +456,8 @@ Deno.serve(async (req) => {
       { headers: corsHeaders },
     );
   } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: corsHeaders });
+    const message = serializeError(err);
+    console.error(message, err);
+    return new Response(JSON.stringify({ ok: false, error: message }), { status: 500, headers: corsHeaders });
   }
 });

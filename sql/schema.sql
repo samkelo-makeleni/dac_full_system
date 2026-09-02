@@ -148,6 +148,8 @@ create table if not exists public.generated_dacs (
   reporting_period text not null,      -- e.g. "August 2026"
   period_start date not null,
   period_end date not null,
+  dac_area text,                       -- e.g. "DEV DAC", "PM DAC"
+  description text,                    -- DAC description captured from the selected business area
   storage_path text not null,          -- path inside 'generated-dacs' bucket
   generated_at timestamptz not null default now(),
   generated_by text not null default 'automated'  -- 'automated' or a user id/name
