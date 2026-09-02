@@ -169,13 +169,25 @@
     <p class="muted">After all weekly reports for the month show Parsed, generate the monthly DAC and download it here.</p>
     <label for="manualPeriod">Month</label>
     <input id="manualPeriod" type="month" />
+    <label for="dacArea">Area</label>
+    <select id="dacArea">
+      <option value="">Select the area for this DAC</option>
+      <option value="ADBA DAC">ADBA DAC</option>
+      <option value="DEV 2 DAC">DEV 2 DAC</option>
+      <option value="DEV DAC">DEV DAC</option>
+      <option value="OPS DAC">OPS DAC</option>
+      <option value="PM DAC">PM DAC</option>
+      <option value="SharePoint DAC">SharePoint DAC</option>
+      <option value="SQA DAC">SQA DAC</option>
+      <option value="System Analysis DAC">System Analysis DAC</option>
+    </select>
     <button id="generateBtn">Generate DAC</button>
     <p id="generateStatus" class="muted"></p>
     <p id="generateDownload" class="hidden"></p>
 
     <h3>Generated DACs</h3>
     <table id="dacsTable">
-      <thead><tr><th>Period</th><th>Generated</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>Period</th><th>Area</th><th>Generated</th><th>File</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -233,6 +245,21 @@
   });
 
   const el = (id) => document.getElementById(id);
+  const DAC_AREA_OPTIONS = [
+    "DEV DAC",
+    "System Analysis DAC",
+    "PM DAC",
+    "SQA DAC",
+    "DEV 2 DAC",
+    "ADBA DAC",
+    "OPS DAC",
+    "SharePoint DAC",
+  ];
+
+  function resolveDacAreaName(value) {
+    const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+    return DAC_AREA_OPTIONS.includes(normalized) ? normalized : (normalized || "Project Management");
+  }
 
   let currentProfile = null;
   let authMode = "login";
@@ -445,6 +472,21 @@
     await loadMyUploads({ retryPending: false });
   }
 
+  function formatErrorMessage(value) {
+    if (typeof value === "string") return value;
+    if (value && typeof value === "object") {
+      if (typeof value.message === "string") return value.message;
+      if (typeof value.error === "string") return value.error;
+      if (typeof value.details === "string") return value.details;
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value ?? "Unknown error");
+  }
+
   function showGenerateFailures(json, targetEl) {
     const failures = json.parseFailures || json.pendingReports || [];
     if (!failures.length) return;
@@ -454,7 +496,8 @@
     for (const failure of failures) {
       const item = document.createElement("li");
       const parts = [failure.personName, failure.weekStart].filter(Boolean).join(" — ");
-      item.textContent = `${parts || "Weekly report"}: ${failure.error || "still pending"}`;
+      const errorText = formatErrorMessage(failure.error || "still pending");
+      item.textContent = `${parts || "Weekly report"}: ${errorText}`;
       list.appendChild(item);
     }
     targetEl.appendChild(list);
@@ -497,6 +540,7 @@
   function renderDacRow(tbody, dac) {
     const tr = document.createElement("tr");
     appendTextCell(tr, dac.reporting_period || dac.reportingPeriod || "");
+    appendTextCell(tr, dac.dac_area || dac.description || "");
     appendTextCell(tr, new Date(dac.generated_at || Date.now()).toLocaleString());
 
     const fileCell = document.createElement("td");
@@ -618,6 +662,9 @@
         el("personName").value = profile.full_name;
         await loadMyUploads();
         await loadDacs();
+      } else {
+        el("teamLeadView").classList.add("hidden");
+        el("managerDacsView").classList.add("hidden");
       }
     } catch (err) {
       console.error("Profile lookup failed:", err);
@@ -844,7 +891,7 @@
   async function loadDacs() {
     const { data, error } = await supabaseClient
       .from("generated_dacs")
-      .select("id, reporting_period, generated_at, storage_path")
+      .select("id, reporting_period, dac_area, description, generated_at, storage_path")
       .order("generated_at", { ascending: false });
 
     const tbody = document.querySelector("#dacsTable tbody");
@@ -878,17 +925,23 @@
     downloadEl.innerHTML = "";
 
     const monthVal = el("manualPeriod").value; // "2026-08"
+    const selectedArea = resolveDacAreaName(el("dacArea").value);
     if (!monthVal) {
       statusEl.textContent = "Select the month you want to generate first.";
       statusEl.className = "status-error";
       return;
     }
+    if (!el("dacArea").value) {
+      statusEl.textContent = "Select the DAC area before generating the document.";
+      statusEl.className = "status-error";
+      return;
+    }
 
-    statusEl.textContent = "Generating… this can take up to a minute while the DAC document is prepared.";
+    statusEl.textContent = `Generating ${selectedArea}… this can take up to a minute while the DAC document is prepared.`;
     statusEl.className = "muted";
     setButtonLoading(button, true, "Generating...");
 
-    const body = { periodStart: `${monthVal}-01` };
+    const body = { periodStart: `${monthVal}-01`, dacArea: selectedArea };
 
     const { data: { session } } = await supabaseClient.auth.getSession();
 
@@ -903,7 +956,8 @@
       });
       const json = await res.json();
       if (!json.ok) {
-        statusEl.textContent = "Failed: " + (json.error || json.message);
+        const errorText = formatErrorMessage(json.error || json.message || res.statusText || "Unknown DAC generation error");
+        statusEl.textContent = "Failed: " + errorText;
         statusEl.className = "status-error";
         showGenerateFailures(json, downloadEl);
         await loadMyUploads();
@@ -922,6 +976,8 @@
         renderDacRow(tbody, {
           id: json.dacId,
           reportingPeriod: json.reportingPeriod,
+          dac_area: json.dacArea || selectedArea,
+          description: json.dacArea || selectedArea,
           downloadUrl: json.downloadUrl,
         });
       }
