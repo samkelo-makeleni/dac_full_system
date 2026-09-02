@@ -87,6 +87,7 @@ Repeat for everyone who needs access.
    supabase secrets set DAC_EMAIL_FROM="Falcorp DAC Portal <samkelo.makeleni@falcorp.co.za>"
    supabase secrets set DAC_PORTAL_URL="https://samkelo-makeleni.github.io/dac_full_system/"
    supabase secrets set DAC_MANAGER_EMAIL="lrouxe1@telkom.co.za,samkelo.makeleni@falcorp.co.za"
+   supabase secrets set ALERT_EMAIL_TO="samkelo.makeleni@falcorp.co.za"
    supabase secrets set OPENAI_API_KEY=sk-your-openai-key-here
    supabase secrets set OPENAI_MODEL=gpt-5
    supabase secrets set PARSE_REPORT_WEBHOOK_SECRET="make-a-long-random-secret"
@@ -97,12 +98,15 @@ Repeat for everyone who needs access.
    ```
    supabase functions deploy parse-report --no-verify-jwt
    supabase functions deploy generate-dac --no-verify-jwt
+   supabase functions deploy system-health --no-verify-jwt
    supabase functions deploy delete-report --no-verify-jwt
    supabase functions deploy delete-all-reports --no-verify-jwt
    supabase functions deploy delete-dac --no-verify-jwt
    supabase functions deploy approve-user --no-verify-jwt
    supabase functions deploy notify-user-approved --no-verify-jwt
    ```
+
+   The new `system-health` function pings Supabase, Resend, and OpenAI. If any of them are unhealthy, it returns HTTP 503 and can email `ALERT_EMAIL_TO` when configured.
 
 The approval function verifies that the caller is a manager, updates the user's
 `profiles` row, and sends the approval email through Resend. The email settings

@@ -45,6 +45,11 @@
   .status-ok { color: #1a7a1a; }
   .status-pending { color: #b8860b; }
   .status-error { color: #b00020; }
+  .health-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-top: 1rem; }
+  .health-item { border: 1px solid var(--grey); border-radius: 6px; padding: 0.85rem; }
+  .health-item strong { display: block; margin-bottom: 0.35rem; }
+  .health-detail { display: block; margin-top: 0.35rem; overflow-wrap: anywhere; }
+  .health-toolbar { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; }
   .hidden { display: none; }
   .muted { color: #666; font-size: 0.9rem; }
   a.download { color: var(--teal); font-weight: 600; text-decoration: none; }
@@ -85,6 +90,7 @@
   }
   @media (max-width: 640px) {
     header { align-items: flex-start; flex-direction: column; gap: 0.75rem; }
+    .health-grid { grid-template-columns: 1fr; }
     .footer-nav-inner { grid-template-columns: 1fr; }
     .footer-brand-block { flex-direction: column; }
     .footer-logo { width: 76px; }
@@ -192,6 +198,19 @@
     </table>
   </section>
 
+  <section id="systemHealthView" class="card hidden">
+    <div class="health-toolbar">
+      <div>
+        <h2>System status</h2>
+        <p class="muted">Live availability of the services used by the DAC portal.</p>
+      </div>
+      <button id="refreshHealthBtn" class="secondary" type="button">Refresh status</button>
+    </div>
+    <div id="healthSummary" class="muted">Checking system status...</div>
+    <div id="healthChecks" class="health-grid" aria-live="polite"></div>
+    <p id="healthCheckedAt" class="muted"></p>
+  </section>
+
 </main>
 
 <footer class="footer-nav">
@@ -227,6 +246,7 @@
   const SUPABASE_ANON_KEY = "sb_publishable_YDEqAubV8Dbpe6K_WlpY8A_chMCK6Ke";
   const PARSE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/parse-report`;
   const GENERATE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/generate-dac`;
+  const SYSTEM_HEALTH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/system-health`;
   const DELETE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-report`;
   const DELETE_ALL_REPORTS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-all-reports`;
   const DELETE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-dac`;
@@ -609,6 +629,7 @@
     el("loginView").classList.remove("hidden");
     el("teamLeadView").classList.add("hidden");
     el("managerDacsView").classList.add("hidden");
+    el("systemHealthView").classList.add("hidden");
     el("userBadge").textContent = "";
     currentProfile = null;
   }
@@ -659,12 +680,15 @@
       if (["team_lead", "manager"].includes(profile.role)) {
         el("teamLeadView").classList.remove("hidden");
         el("managerDacsView").classList.remove("hidden");
+        el("systemHealthView").classList.remove("hidden");
         el("personName").value = profile.full_name;
         await loadMyUploads();
         await loadDacs();
+        await loadSystemHealth();
       } else {
         el("teamLeadView").classList.add("hidden");
         el("managerDacsView").classList.add("hidden");
+        el("systemHealthView").classList.add("hidden");
       }
     } catch (err) {
       console.error("Profile lookup failed:", err);
@@ -911,7 +935,52 @@
     setTimeout(loadDacs, 4000);
   }
 
+  function renderHealthCheck(check) {
+    const item = document.createElement("div");
+    item.className = "health-item";
+    const name = document.createElement("strong");
+    name.textContent = check.name;
+    const result = document.createElement("span");
+    result.className = check.ok ? "status-ok" : "status-error";
+    result.textContent = check.ok ? "Operational" : "Unavailable";
+    const detail = document.createElement("span");
+    detail.className = "muted health-detail";
+    detail.textContent = check.detail || "No additional details";
+    item.append(name, result, detail);
+    return item;
+  }
+
+  async function loadSystemHealth() {
+    const summaryEl = el("healthSummary");
+    const checksEl = el("healthChecks");
+    const checkedAtEl = el("healthCheckedAt");
+    const button = el("refreshHealthBtn");
+    setButtonLoading(button, true, "Checking...");
+    summaryEl.textContent = "Checking system status...";
+    summaryEl.className = "muted";
+
+    try {
+      const response = await fetch(SYSTEM_HEALTH_FUNCTION_URL, { cache: "no-store" });
+      const result = await response.json();
+      checksEl.replaceChildren(...(result.checks || []).map(renderHealthCheck));
+      const failed = result.summary?.failed ?? result.checks?.filter((check) => !check.ok).length ?? 0;
+      summaryEl.textContent = failed === 0
+        ? "All monitored services are operational."
+        : `${failed} monitored service${failed === 1 ? " is" : "s are"} unavailable.`;
+      summaryEl.className = failed === 0 ? "status-ok" : "status-error";
+      checkedAtEl.textContent = `Last checked: ${new Date().toLocaleString()}`;
+    } catch (error) {
+      checksEl.replaceChildren();
+      summaryEl.textContent = "Unable to reach the system health service.";
+      summaryEl.className = "status-error";
+      checkedAtEl.textContent = "Try refreshing in a moment.";
+    } finally {
+      setButtonLoading(button, false);
+    }
+  }
+
   el("logoutBtn")?.addEventListener("click", logout);
+  el("refreshHealthBtn")?.addEventListener("click", loadSystemHealth);
 
   el("deleteAllReportsBtn")?.addEventListener("click", (event) => {
     deleteAllReports(event.currentTarget);

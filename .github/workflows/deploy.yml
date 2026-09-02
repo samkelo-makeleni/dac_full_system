@@ -42,6 +42,7 @@ jobs:
 
           supabase functions deploy parse-report --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
           supabase functions deploy generate-dac --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+          supabase functions deploy system-health --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
           supabase functions deploy delete-report --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
           supabase functions deploy delete-all-reports --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
           supabase functions deploy delete-dac --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt

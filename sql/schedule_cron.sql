@@ -27,6 +27,23 @@ select cron.schedule(
   $$
 );
 
+-- Optional: run a daily dependency health check so outages in Supabase,
+-- Resend, or OpenAI are detected before users report them.
+select cron.schedule(
+  'dac-system-health-check',
+  '0 7 * * *',
+  $$
+  select net.http_post(
+    url := 'https://lrqvvxxhaxakmhnvrlbn.functions.supabase.co/system-health',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer YOUR-SERVICE-ROLE-KEY'
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
+
 -- To check scheduled jobs:
 --   select * from cron.job;
 -- To remove the schedule:

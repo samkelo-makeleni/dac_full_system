@@ -18,6 +18,7 @@ import { buildDac, DacData } from "../_shared/dac_template.ts";
 import { writeMonthlyNarrative, PersonMonth } from "../_shared/write_narrative.ts";
 import { DAC_CONFIG } from "../_shared/dac_config.ts";
 import { parseWeeklyReportBuffer } from "../_shared/docx_parser.ts";
+import { sendMonitoringAlert, splitEmailList } from "../_shared/monitoring.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -458,6 +459,21 @@ Deno.serve(async (req) => {
   } catch (err) {
     const message = serializeError(err);
     console.error(message, err);
+
+    const recipients = splitEmailList(Deno.env.get("ALERT_EMAIL_TO") ?? Deno.env.get("DAC_MANAGER_EMAIL"));
+    if (recipients.length > 0) {
+      await sendMonitoringAlert(
+        "[Falcorp DAC] generate-dac failed",
+        [
+          "The DAC generation pipeline failed while processing a report cycle.",
+          "",
+          `Error: ${message}`,
+          "",
+          `Time: ${new Date().toISOString()}`,
+        ].join("\n"),
+      );
+    }
+
     return new Response(JSON.stringify({ ok: false, error: message }), { status: 500, headers: corsHeaders });
   }
 });
