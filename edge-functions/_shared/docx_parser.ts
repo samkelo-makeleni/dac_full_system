@@ -126,10 +126,16 @@ function isKnownSectionHeading(text: string): boolean {
 }
 
 function extractSectionTable(html: string, headingText: string): string | null {
+  return extractSectionTables(html, headingText)[0] ?? null;
+}
+
+function extractSectionTables(html: string, headingText: string): string[] {
   // Weekly reports sometimes convert section titles to <p><strong>...</strong></p>
-  // instead of h1/h2. Walk block order and take the next table after a matching title.
+  // instead of headings. Walk block order and collect every table after a
+  // matching title until the next section heading.
   const wanted = new Set(sectionAliases(headingText).map(normalizeHeading));
-  const blockRe = /<(h[12]|p|table)\b[^>]*>[\s\S]*?<\/\1>/gi;
+  const blockRe = /<(h[1-6]|p|table)\b[^>]*>[\s\S]*?<\/\1>/gi;
+  const tables: string[] = [];
   let foundHeading = false;
   let block: RegExpExecArray | null;
 
@@ -138,22 +144,23 @@ function extractSectionTable(html: string, headingText: string): string | null {
     const blockHtml = block[0];
 
     if (tag === "table") {
-      if (foundHeading) return blockHtml;
+      if (foundHeading) tables.push(blockHtml);
       continue;
     }
 
     const text = normalizeHeading(stripTags(blockHtml));
+    if (foundHeading && isKnownSectionHeading(text)) break;
     if (headingMatches(text, wanted)) {
       foundHeading = true;
     }
   }
 
-  return null;
+  return tables;
 }
 
 function extractSectionContent(html: string, headingText: string): string[] {
   const wanted = new Set(sectionAliases(headingText).map(normalizeHeading));
-  const blockRe = /<(h[12]|p|ul|ol|table)\b[^>]*>[\s\S]*?<\/\1>/gi;
+  const blockRe = /<(h[1-6]|p|ul|ol|table)\b[^>]*>[\s\S]*?<\/\1>/gi;
   const values: string[] = [];
   let foundHeading = false;
   let block: RegExpExecArray | null;
@@ -171,7 +178,7 @@ function extractSectionContent(html: string, headingText: string): string[] {
 
     if (!foundHeading) continue;
 
-    if (((tag === "h1" || tag === "h2") || isKnownSectionHeading(normalizedText)) && values.length > 0) break;
+    if ((tag.startsWith("h") || isKnownSectionHeading(normalizedText)) && values.length > 0) break;
     if (tag === "table") continue;
 
     if (text) values.push(text);
@@ -227,16 +234,17 @@ function composePersonName(firstName: string | null, surname: string | null): st
 }
 
 function parseActivities(html: string): Activity[] {
-  const table = extractSectionTable(html, "Project Activities") ?? findActivityTable(html);
-  const rows = parseRows(table);
+  const tables = extractSectionTables(html, "Project Activities");
+  const rows = tables.flatMap(parseRows);
+  const fallbackRows = rows.length ? rows : parseRows(findActivityTable(html));
   const sectionTextRows = extractSectionContent(html, "Project Activities")
     .map((text) => ({ day: "", project: "General delivery", hours: "", work: text, notes: "" }))
     .filter((activity) => !isTemplateInstruction([activity.work]));
-  if (!rows.length) return uniqueActivities(sectionTextRows);
-  const header = rows[0].map(normalizeHeading);
+  if (!fallbackRows.length) return uniqueActivities(sectionTextRows);
+  const header = fallbackRows[0].map(normalizeHeading);
   const isHeaderRow = header.some((h) => h === "day" || h === "date") &&
     header.some((h) => h.includes("project") || h.includes("activity") || h.includes("work"));
-  const dataRows = isHeaderRow ? rows.slice(1) : rows;
+  const dataRows = isHeaderRow ? fallbackRows.slice(1) : fallbackRows;
 
   const activities: Activity[] = [];
   let lastDay = "";
@@ -316,8 +324,7 @@ function findActivityTable(html: string): string | null {
 }
 
 function parseGenericTable(html: string, headingText: string): string[][] {
-  const table = extractSectionTable(html, headingText);
-  const rows = parseRows(table);
+  const rows = extractSectionTables(html, headingText).flatMap(parseRows);
   const hasHeader = rows.length > 1 && rows[0].some((cell) =>
     /description|details?|item|risk|issue|action|learning|improvement|value|efficiency|status|owner|date/i.test(cell)
   );
