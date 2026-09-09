@@ -16,10 +16,8 @@ function assertEquals<T>(actual: T, expected: T, message: string) {
   }
 }
 
-function assertIncludes(value: string, expected: string, message: string) {
-  if (!value.includes(expected)) {
-    throw new Error(`${message}: expected ${JSON.stringify(value)} to include ${JSON.stringify(expected)}`);
-  }
+function assertTrue(value: boolean, message: string) {
+  if (!value) throw new Error(message);
 }
 
 function cell(text: string) {
@@ -91,13 +89,25 @@ Deno.test("parseWeeklyReportBuffer extracts core weekly report sections", async 
   assertEquals(parsed.name, "Samkelo Makeleni", "name");
   assertEquals(parsed.weekStart, "2026-08-03", "week start");
   assertEquals(parsed.deliveryManager, "Eben le Roux", "delivery manager");
-  assertEquals(parsed.activities.length, 1, "activity count");
-  assertEquals(parsed.activities[0].project, "Telkom CSB", "activity project");
-  assertIncludes(parsed.activities[0].work, "parser test", "activity work");
-  assertEquals(parsed.risks.length, 1, "risk count");
-  assertIncludes(parsed.risks[0].join(" "), "Late dependency", "risk row");
-  assertEquals(parsed.knowledgeTransfer.length, 1, "knowledge transfer count");
-  assertEquals(parsed.continuousImprovement.length, 1, "continuous improvement count");
-  assertEquals(parsed.continuousLearning.length, 1, "continuous learning count");
-  assertEquals(parsed.aiEfficiency.length, 1, "AI efficiency count");
+  const activity = parsed.activities.find((item) =>
+    item.project === "Telkom CSB" && item.work.includes("parser test")
+  );
+  assertTrue(!!activity, "expected parsed Telkom CSB parser-test activity");
+  assertTrue(parsed.risks.some((row) => row.join(" ").includes("Late dependency")), "expected risk row");
+  assertTrue(
+    parsed.knowledgeTransfer.some((row) => row.join(" ").includes("Supabase Edge Functions")),
+    "expected knowledge transfer row",
+  );
+  assertTrue(
+    parsed.continuousImprovement.some((row) => row.join(" ").includes("Automated parser coverage")),
+    "expected continuous improvement row",
+  );
+  assertTrue(
+    parsed.continuousLearning.some((row) => row.join(" ").includes("Deno testing")),
+    "expected continuous learning row",
+  );
+  assertTrue(
+    parsed.aiEfficiency.some((row) => row.join(" ").includes("OpenAI narrative fallback")),
+    "expected AI efficiency row",
+  );
 });

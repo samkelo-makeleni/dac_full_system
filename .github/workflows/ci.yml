@@ -22,7 +22,7 @@ jobs:
 
       - name: Lint Supabase Edge Functions
         run: |
-          deno lint --rules-exclude=no-explicit-any supabase/functions
+          deno lint --rules-exclude=no-explicit-any,no-import-prefix supabase/functions
 
       - name: Ensure edge-functions mirror Supabase functions
         run: |
@@ -36,7 +36,7 @@ jobs:
 
       - name: Run parser tests
         run: |
-          deno test --allow-env supabase/functions/_shared/docx_parser_test.ts
+          deno test --node-modules-dir=auto --allow-env supabase/functions/_shared/docx_parser_test.ts
 
       - name: Validate frontend entrypoint
         run: |

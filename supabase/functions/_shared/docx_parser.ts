@@ -125,10 +125,6 @@ function isKnownSectionHeading(text: string): boolean {
   return headingMatches(text, KNOWN_SECTION_ALIASES);
 }
 
-function extractSectionTable(html: string, headingText: string): string | null {
-  return extractSectionTables(html, headingText)[0] ?? null;
-}
-
 function extractSectionTables(html: string, headingText: string): string[] {
   // Weekly reports sometimes convert section titles to <p><strong>...</strong></p>
   // instead of headings. Walk block order and collect every table after a
