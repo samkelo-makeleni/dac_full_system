@@ -158,7 +158,6 @@
       <thead>
         <tr>
           <th>Month</th>
-          <th>Week</th>
           <th>Start</th>
           <th>File</th>
           <th>Status</th>
@@ -362,12 +361,6 @@
   function monthLabel(dateString) {
     const date = new Date(`${dateString}T00:00:00`);
     return date.toLocaleString("en-US", { month: "long", year: "numeric" });
-  }
-
-  function monthWeekLabel(dateString) {
-    const day = Number(dateString.slice(8, 10));
-    const week = Math.floor((day - 1) / 7) + 1;
-    return `Week ${week}`;
   }
 
   function appendDeleteCell(row, report) {
@@ -898,7 +891,6 @@
     for (const r of data) {
       const tr = document.createElement("tr");
       appendTextCell(tr, monthLabel(r.week_start));
-      appendTextCell(tr, monthWeekLabel(r.week_start));
       appendTextCell(tr, r.week_start);
       appendTextCell(tr, r.storage_path.split("/").pop());
       appendStatusCell(tr, r);
