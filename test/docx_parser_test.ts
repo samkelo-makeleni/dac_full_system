@@ -8,7 +8,7 @@ import {
   TableRow,
   TextRun,
 } from "npm:docx@9.6.1";
-import { parseWeeklyReportBuffer } from "./docx_parser.ts";
+import { parseWeeklyReportBuffer } from "../supabase/functions/_shared/docx_parser.ts";
 
 function assertEquals<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
