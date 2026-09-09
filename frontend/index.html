@@ -250,7 +250,6 @@
   const DELETE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-report`;
   const DELETE_ALL_REPORTS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-all-reports`;
   const DELETE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-dac`;
-  const APPROVE_USER_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/approve-user`;
   // -----------------------------------------
 
   const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
@@ -960,8 +959,21 @@
     summaryEl.className = "muted";
 
     try {
-      const response = await fetch(SYSTEM_HEALTH_FUNCTION_URL, { cache: "no-store" });
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Missing session");
+      }
+
+      const response = await fetch(SYSTEM_HEALTH_FUNCTION_URL, {
+        cache: "no-store",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
       const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || response.statusText);
+      }
       checksEl.replaceChildren(...(result.checks || []).map(renderHealthCheck));
       const failed = result.summary?.failed ?? result.checks?.filter((check) => !check.ok).length ?? 0;
       summaryEl.textContent = failed === 0

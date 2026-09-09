@@ -18,6 +18,7 @@ import { buildDac, DacData } from "../_shared/dac_template.ts";
 import { writeMonthlyNarrative, PersonMonth } from "../_shared/write_narrative.ts";
 import { DAC_CONFIG } from "../_shared/dac_config.ts";
 import { parseWeeklyReportBuffer } from "../_shared/docx_parser.ts";
+import { sendMonitoringAlert, splitEmailList } from "../_shared/monitoring.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -48,6 +49,23 @@ function uint8ArrayToBase64(bytes: Uint8Array) {
 
 function uniqueStrings(values: unknown[]) {
   return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
+}
+
+function serializeError(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (typeof value === "string") return value.trim() || "Unknown error";
+  if (value && typeof value === "object") {
+    const candidate = value as any;
+    if (typeof candidate.message === "string" && candidate.message.trim()) return candidate.message;
+    if (typeof candidate.error === "string" && candidate.error.trim()) return candidate.error;
+    if (typeof candidate.details === "string" && candidate.details.trim()) return candidate.details;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return Object.prototype.toString.call(value);
+    }
+  }
+  return String(value ?? "Unknown error");
 }
 
 async function loadProfileNamesById(supabase: any, userIds: string[]) {
@@ -439,7 +457,23 @@ Deno.serve(async (req) => {
       { headers: corsHeaders },
     );
   } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: corsHeaders });
+    const message = serializeError(err);
+    console.error(message, err);
+
+    const recipients = splitEmailList(Deno.env.get("ALERT_EMAIL_TO") ?? Deno.env.get("DAC_MANAGER_EMAIL"));
+    if (recipients.length > 0) {
+      await sendMonitoringAlert(
+        "[Falcorp DAC] generate-dac failed",
+        [
+          "The DAC generation pipeline failed while processing a report cycle.",
+          "",
+          `Error: ${message}`,
+          "",
+          `Time: ${new Date().toISOString()}`,
+        ].join("\n"),
+      );
+    }
+
+    return new Response(JSON.stringify({ ok: false, error: message }), { status: 500, headers: corsHeaders });
   }
 });

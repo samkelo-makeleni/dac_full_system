@@ -1,4 +1,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  checkOpenAiApi,
+  checkResendApi,
+  checkSupabaseDatabase,
+  sendMonitoringAlert,
+  splitEmailList,
+  summarizeChecks,
+  type DependencyCheck,
+} from "../_shared/monitoring.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -9,123 +18,34 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
-type DependencyCheck = {
-  name: string;
-  ok: boolean;
-  detail: string;
-};
+async function authorizeHealthCheck(req: Request, supabase: any) {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
 
-function splitEmailList(value: string | undefined): string[] {
-  return (value ?? "")
-    .split(/[;,]/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
+  if (bearerToken === SERVICE_ROLE_KEY) return null;
 
-function summarizeChecks(checks: DependencyCheck[]) {
-  const failed = checks.filter((check) => !check.ok);
-  return {
-    ok: failed.length === 0,
-    total: checks.length,
-    failed: failed.length,
-    failedNames: failed.map((check) => check.name),
-  };
-}
-
-async function checkSupabaseDatabase(supabase: any): Promise<DependencyCheck> {
-  try {
-    const { error } = await supabase.from("profiles").select("id").limit(1);
-    if (error) throw error;
-    return { name: "Supabase database", ok: true, detail: "Database query succeeded" };
-  } catch (error) {
-    return {
-      name: "Supabase database",
-      ok: false,
-      detail: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-async function checkOpenAiApi(): Promise<DependencyCheck> {
-  const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
-  if (!apiKey) {
-    return { name: "OpenAI API", ok: false, detail: "Missing OPENAI_API_KEY secret" };
-  }
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/models", {
-      headers: { Authorization: `Bearer ${apiKey}` },
+  const { data: userData, error: userError } = await supabase.auth.getUser(bearerToken);
+  if (userError || !userData?.user) {
+    return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+      status: 401,
+      headers: corsHeaders,
     });
-
-    if (!response.ok) {
-      const body = await response.text();
-      return { name: "OpenAI API", ok: false, detail: `HTTP ${response.status}: ${body || response.statusText}` };
-    }
-
-    return { name: "OpenAI API", ok: true, detail: "Models endpoint responded successfully" };
-  } catch (error) {
-    return { name: "OpenAI API", ok: false, detail: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-async function checkResendApi(): Promise<DependencyCheck> {
-  const apiKey = Deno.env.get("RESEND_API_KEY") ?? "";
-  if (!apiKey) {
-    return { name: "Resend email", ok: false, detail: "Missing RESEND_API_KEY secret" };
   }
 
-  try {
-    const response = await fetch("https://api.resend.com/domains", {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (profileError || !profile || !["manager", "team_lead"].includes(profile.role)) {
+    return new Response(JSON.stringify({ ok: false, error: "Only approved users can view system health" }), {
+      status: 403,
+      headers: corsHeaders,
     });
-
-    if (!response.ok) {
-      const body = await response.text();
-      return { name: "Resend email", ok: false, detail: `HTTP ${response.status}: ${body || response.statusText}` };
-    }
-
-    return { name: "Resend email", ok: true, detail: "Resend API responded successfully" };
-  } catch (error) {
-    return { name: "Resend email", ok: false, detail: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-async function sendMonitoringAlert(subject: string, body: string) {
-  const apiKey = Deno.env.get("RESEND_API_KEY") ?? "";
-  const fromAddress = Deno.env.get("DAC_EMAIL_FROM") ?? "";
-  const recipients = splitEmailList(Deno.env.get("ALERT_EMAIL_TO") ?? Deno.env.get("DAC_MANAGER_EMAIL"));
-
-  if (!apiKey || !fromAddress || recipients.length === 0) {
-    return { sent: false, reason: "Missing Resend configuration or ALERT_EMAIL_TO recipients" };
   }
 
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: fromAddress,
-        to: recipients,
-        subject,
-        text: body,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return { sent: false, reason: `Resend error ${response.status}: ${text || response.statusText}` };
-    }
-
-    return { sent: true, reason: null };
-  } catch (error) {
-    return { sent: false, reason: error instanceof Error ? error.message : String(error) };
-  }
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -136,6 +56,9 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   try {
+    const authResponse = await authorizeHealthCheck(req, supabase);
+    if (authResponse) return authResponse;
+
     const checks: DependencyCheck[] = [
       await checkSupabaseDatabase(supabase),
       await checkResendApi(),
@@ -174,8 +97,9 @@ Deno.serve(async (req) => {
       { status: summary.ok ? 200 : 503, headers: corsHeaders },
     );
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     return new Response(
-      JSON.stringify({ ok: false, status: "error", error: err instanceof Error ? err.message : String(err) }),
+      JSON.stringify({ ok: false, status: "error", error: message }),
       { status: 500, headers: corsHeaders },
     );
   }

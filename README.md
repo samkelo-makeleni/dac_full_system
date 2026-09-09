@@ -14,8 +14,8 @@ Static Supabase portal for collecting weekly `.docx` reports and generating mont
 
 - `frontend/index.html` - static portal; no build step.
 - `sql/` - schema, storage policies, and monthly cron setup.
-- `supabase/functions/` - deployable Supabase Edge Functions.
-- `edge-functions/` - mirrored copy of the Edge Functions for manual/reference workflows.
+- `supabase/functions/` - deployable Supabase Edge Functions and runtime source of truth.
+- `edge-functions/` - mirrored copy of the Edge Functions for manual/reference workflows; CI fails if it drifts from `supabase/functions/`.
 - `docs/` - deployment notes and live SQL checks.
 - `.github/workflows/` - CI plus GitHub Pages/Supabase deployment.
 

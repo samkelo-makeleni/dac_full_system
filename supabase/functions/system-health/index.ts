@@ -18,6 +18,36 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+async function authorizeHealthCheck(req: Request, supabase: any) {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+
+  if (bearerToken === SERVICE_ROLE_KEY) return null;
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(bearerToken);
+  if (userError || !userData?.user) {
+    return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+      status: 401,
+      headers: corsHeaders,
+    });
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (profileError || !profile || !["manager", "team_lead"].includes(profile.role)) {
+    return new Response(JSON.stringify({ ok: false, error: "Only approved users can view system health" }), {
+      status: 403,
+      headers: corsHeaders,
+    });
+  }
+
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -26,6 +56,9 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   try {
+    const authResponse = await authorizeHealthCheck(req, supabase);
+    if (authResponse) return authResponse;
+
     const checks: DependencyCheck[] = [
       await checkSupabaseDatabase(supabase),
       await checkResendApi(),

@@ -24,11 +24,19 @@ jobs:
         run: |
           deno lint --rules-exclude=no-explicit-any supabase/functions
 
+      - name: Ensure edge-functions mirror Supabase functions
+        run: |
+          diff -qr -x .DS_Store supabase/functions edge-functions
+
       - name: Validate required SQL files
         run: |
           test -s sql/schema.sql
           test -s sql/storage_policies.sql
           test -s sql/schedule_cron.sql
+
+      - name: Run parser tests
+        run: |
+          deno test --allow-env supabase/functions/_shared/docx_parser_test.ts
 
       - name: Validate frontend entrypoint
         run: |
