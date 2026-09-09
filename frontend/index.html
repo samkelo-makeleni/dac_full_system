@@ -10,11 +10,13 @@
     --teal: #1F6E8C;
     --grey: #D9D9D9;
     --bg: #F7F9FA;
+    --fixed-header-height: 88px;
+    --fixed-footer-height: 220px;
   }
   * { box-sizing: border-box; }
   html { min-height: 100%; }
-  body { min-height: 100vh; display: flex; flex-direction: column; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: var(--bg); color: #222; }
-  header { background: var(--teal); color: white; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+  body { min-height: 100vh; display: flex; flex-direction: column; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding-top: var(--fixed-header-height); padding-bottom: var(--fixed-footer-height); background: var(--bg); color: #222; }
+  header { position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--teal); color: white; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 8px 22px rgba(18, 63, 82, 0.16); }
   header h1 { font-size: 1.1rem; margin: 0; }
   .brand { display: flex; align-items: center; gap: 0.75rem; }
   .brand-logo { width: 76px; height: auto; display: block; background: white; border-radius: 4px; padding: 0.2rem; }
@@ -57,6 +59,13 @@
   .table-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .table-actions button { white-space: nowrap; }
   .footer-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    max-height: 40vh;
+    overflow-y: auto;
     background: #123f52;
     color: white;
     padding: 1.5rem 1.5rem 1rem;
@@ -90,6 +99,7 @@
   }
   @media (max-width: 640px) {
     header { align-items: flex-start; flex-direction: column; gap: 0.75rem; }
+    .footer-nav { max-height: 46vh; }
     .health-grid { grid-template-columns: 1fr; }
     .footer-nav-inner { grid-template-columns: 1fr; }
     .footer-brand-block { flex-direction: column; }
@@ -263,6 +273,23 @@
   });
 
   const el = (id) => document.getElementById(id);
+  const fixedHeader = document.querySelector("header");
+  const fixedFooter = document.querySelector(".footer-nav");
+
+  function syncFixedChromeOffsets() {
+    document.documentElement.style.setProperty("--fixed-header-height", `${fixedHeader?.offsetHeight || 0}px`);
+    document.documentElement.style.setProperty("--fixed-footer-height", `${fixedFooter?.offsetHeight || 0}px`);
+  }
+
+  syncFixedChromeOffsets();
+  window.addEventListener("resize", syncFixedChromeOffsets);
+
+  if ("ResizeObserver" in window) {
+    const chromeObserver = new ResizeObserver(syncFixedChromeOffsets);
+    if (fixedHeader) chromeObserver.observe(fixedHeader);
+    if (fixedFooter) chromeObserver.observe(fixedFooter);
+  }
+
   const DAC_AREA_OPTIONS = [
     "DEV DAC",
     "System Analysis DAC",
@@ -1063,7 +1090,7 @@
     }
   });
 
-  init();
+  init().finally(syncFixedChromeOffsets);
 </script>
 
 </body>
