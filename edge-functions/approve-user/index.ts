@@ -12,7 +12,7 @@ const PORTAL_URL = Deno.env.get("DAC_PORTAL_URL") ?? "https://samkelo-makeleni.g
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Content-Type": "application/json",
 };
 
@@ -22,6 +22,35 @@ function roleLabel(role: string) {
 
 function isFalcorpEmail(email: string) {
   return /^[^@\s]+@falcorp\.co\.za$/i.test(email);
+}
+
+function requestedRole(value: unknown) {
+  return value === "manager" ? "manager" : "team_lead";
+}
+
+function metadataText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+async function requireManager(req: Request, supabase: ReturnType<typeof createClient>) {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+  const { data: callerData, error: callerError } = await supabase.auth.getUser(bearerToken);
+  if (callerError || !callerData?.user) {
+    return { error: "Unauthorized", status: 401 };
+  }
+
+  const { data: callerProfile, error: callerProfileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", callerData.user.id)
+    .single();
+
+  if (callerProfileError || callerProfile?.role !== "manager") {
+    return { error: "Only managers can approve users", status: 403 };
+  }
+
+  return { userId: callerData.user.id };
 }
 
 async function emailApproval(params: { email: string; fullName: string; role: string }) {
@@ -58,35 +87,68 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const manager = await requireManager(req, supabase);
+    if ("error" in manager) {
+      return new Response(JSON.stringify({ ok: false, error: manager.error }), {
+        status: manager.status,
+        headers: corsHeaders,
+      });
+    }
+
+    if (req.method === "GET") {
+      const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+      if (authUsersError) {
+        return new Response(JSON.stringify({ ok: false, error: authUsersError.message }), {
+          status: 500,
+          headers: corsHeaders,
+        });
+      }
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id");
+      if (profilesError) {
+        return new Response(JSON.stringify({ ok: false, error: profilesError.message }), {
+          status: 500,
+          headers: corsHeaders,
+        });
+      }
+
+      const approvedIds = new Set((profiles ?? []).map((profile) => profile.id));
+      const pendingUsers = (authUsers.users ?? [])
+        .filter((user) => user.email && isFalcorpEmail(user.email) && !approvedIds.has(user.id))
+        .map((user) => {
+          const metadata = user.user_metadata ?? {};
+          return {
+            id: user.id,
+            email: user.email,
+            fullName: metadataText(metadata.full_name) || metadataText(metadata.name),
+            requestedRole: requestedRole(metadata.requested_role),
+            createdAt: user.created_at,
+          };
+        });
+
+      return new Response(JSON.stringify({ ok: true, users: pendingUsers }), {
+        headers: corsHeaders,
+      });
+    }
+
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), {
+        status: 405,
+        headers: corsHeaders,
+      });
+    }
+
     const { profileId, fullName, role } = await req.json();
 
     if (!profileId || !fullName || !["team_lead", "manager"].includes(role)) {
       return new Response(JSON.stringify({ ok: false, error: "Missing profileId/fullName/role" }), {
         status: 400,
-        headers: corsHeaders,
-      });
-    }
-
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    const { data: callerData, error: callerError } = await supabase.auth.getUser(bearerToken);
-    if (callerError || !callerData?.user) {
-      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
-    }
-
-    const { data: callerProfile, error: callerProfileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", callerData.user.id)
-      .single();
-
-    if (callerProfileError || callerProfile?.role !== "manager") {
-      return new Response(JSON.stringify({ ok: false, error: "Only managers can approve users" }), {
-        status: 403,
         headers: corsHeaders,
       });
     }
@@ -123,12 +185,12 @@ Deno.serve(async (req) => {
 
     if (!emailResult.sent) {
       return new Response(JSON.stringify({
-        ok: false,
+        ok: true,
         approved: true,
         approvedEmail: email,
-        error: emailResult.reason,
+        emailSent: false,
+        emailSkippedReason: emailResult.reason,
       }), {
-        status: 502,
         headers: corsHeaders,
       });
     }

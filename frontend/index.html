@@ -207,6 +207,29 @@
     </table>
   </section>
 
+  <section id="managerApprovalView" class="card hidden">
+    <div class="health-toolbar">
+      <div>
+        <h2>User approvals</h2>
+        <p class="muted">Approve registered Falcorp users so they can access the portal.</p>
+      </div>
+      <button id="refreshApprovalsBtn" class="secondary" type="button">Refresh approvals</button>
+    </div>
+    <table id="pendingUsersTable">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Full name</th>
+          <th>Role</th>
+          <th>Registered</th>
+          <th>Approve</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="approvalStatus" class="muted"></p>
+  </section>
+
   <section id="systemHealthView" class="card hidden">
     <div class="health-toolbar">
       <div>
@@ -255,6 +278,7 @@
   const SUPABASE_ANON_KEY = "sb_publishable_YDEqAubV8Dbpe6K_WlpY8A_chMCK6Ke";
   const PARSE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/parse-report`;
   const GENERATE_DAC_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/generate-dac`;
+  const APPROVE_USER_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/approve-user`;
   const SYSTEM_HEALTH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/system-health`;
   const DELETE_REPORT_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-report`;
   const DELETE_ALL_REPORTS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/delete-all-reports`;
@@ -378,6 +402,10 @@
 
   function isFalcorpEmail(email) {
     return /^[^@\s]+@falcorp\.co\.za$/i.test(email);
+  }
+
+  function roleLabel(role) {
+    return role === "manager" ? "Manager" : "Team Lead";
   }
 
   function showFalcorpEmailError(targetEl) {
@@ -526,6 +554,25 @@
     return String(value ?? "Unknown error");
   }
 
+  async function readJsonResponse(response) {
+    const text = await response.text();
+    if (!text) {
+      return {
+        ok: false,
+        error: `${response.status || "No"} response from service`,
+      };
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {
+        ok: false,
+        error: text.slice(0, 240) || "Service returned an unreadable response",
+      };
+    }
+  }
+
   function showGenerateFailures(json, targetEl) {
     const failures = json.parseFailures || json.pendingReports || [];
     if (!failures.length) return;
@@ -648,6 +695,7 @@
     el("loginView").classList.remove("hidden");
     el("teamLeadView").classList.add("hidden");
     el("managerDacsView").classList.add("hidden");
+    el("managerApprovalView").classList.add("hidden");
     el("systemHealthView").classList.add("hidden");
     el("userBadge").textContent = "";
     currentProfile = null;
@@ -700,13 +748,18 @@
         el("teamLeadView").classList.remove("hidden");
         el("managerDacsView").classList.remove("hidden");
         el("systemHealthView").classList.remove("hidden");
+        el("managerApprovalView").classList.toggle("hidden", profile.role !== "manager");
         el("personName").value = profile.full_name;
         await loadMyUploads();
         await loadDacs();
+        if (profile.role === "manager") {
+          await loadPendingApprovals();
+        }
         await loadSystemHealth();
       } else {
         el("teamLeadView").classList.add("hidden");
         el("managerDacsView").classList.add("hidden");
+        el("managerApprovalView").classList.add("hidden");
         el("systemHealthView").classList.add("hidden");
       }
     } catch (err) {
@@ -947,6 +1000,158 @@
     }
   }
 
+  function renderPendingUserRow(tbody, user) {
+    const tr = document.createElement("tr");
+
+    appendTextCell(tr, user.email);
+
+    const nameCell = document.createElement("td");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = user.fullName || "";
+    nameInput.placeholder = "Full name";
+    nameCell.appendChild(nameInput);
+    tr.appendChild(nameCell);
+
+    const roleCell = document.createElement("td");
+    const roleSelect = document.createElement("select");
+    for (const role of ["team_lead", "manager"]) {
+      const option = document.createElement("option");
+      option.value = role;
+      option.textContent = roleLabel(role);
+      roleSelect.appendChild(option);
+    }
+    roleSelect.value = user.requestedRole || "team_lead";
+    roleCell.appendChild(roleSelect);
+    tr.appendChild(roleCell);
+
+    appendTextCell(tr, user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "");
+
+    const actionCell = document.createElement("td");
+    const approveButton = document.createElement("button");
+    approveButton.type = "button";
+    approveButton.textContent = "Approve";
+    approveButton.addEventListener("click", () => approvePendingUser(user, nameInput, roleSelect, approveButton));
+    actionCell.appendChild(approveButton);
+    tr.appendChild(actionCell);
+
+    tbody.appendChild(tr);
+  }
+
+  function renderNoPendingUsers(tbody) {
+    const tr = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.className = "muted";
+    cell.textContent = "No pending user registrations.";
+    tr.appendChild(cell);
+    tbody.appendChild(tr);
+  }
+
+  async function loadPendingApprovals() {
+    if (currentProfile?.role !== "manager") return;
+
+    const tbody = document.querySelector("#pendingUsersTable tbody");
+    const statusEl = el("approvalStatus");
+    const button = el("refreshApprovalsBtn");
+    tbody.innerHTML = "";
+    statusEl.textContent = "Loading pending registrations...";
+    statusEl.className = "muted";
+    setButtonLoading(button, true, "Refreshing...");
+
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Your session expired. Please log in again.");
+      }
+
+      const response = await fetch(APPROVE_USER_FUNCTION_URL, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+      const result = await readJsonResponse(response);
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || response.statusText);
+      }
+
+      if (!result.users?.length) {
+        renderNoPendingUsers(tbody);
+        statusEl.textContent = "All registered users are approved.";
+        statusEl.className = "status-ok";
+        return;
+      }
+
+      for (const user of result.users) {
+        renderPendingUserRow(tbody, user);
+      }
+      statusEl.textContent = `${result.users.length} pending user${result.users.length === 1 ? "" : "s"} awaiting approval.`;
+      statusEl.className = "muted";
+    } catch (error) {
+      renderNoPendingUsers(tbody);
+      statusEl.textContent = `Could not load pending approvals: ${formatErrorMessage(error.message || error)}`;
+      statusEl.className = "status-error";
+    } finally {
+      setButtonLoading(button, false);
+    }
+  }
+
+  async function approvePendingUser(user, nameInput, roleSelect, button) {
+    const fullName = nameInput.value.trim();
+    const role = roleSelect.value;
+    const statusEl = el("approvalStatus");
+
+    if (!fullName || !["team_lead", "manager"].includes(role)) {
+      statusEl.textContent = "Enter the user's full name and select a valid role.";
+      statusEl.className = "status-error";
+      return;
+    }
+
+    setButtonLoading(button, true, "Approving...");
+    statusEl.textContent = `Approving ${user.email}...`;
+    statusEl.className = "muted";
+
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Your session expired. Please log in again.");
+      }
+
+      const response = await fetch(APPROVE_USER_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          profileId: user.id,
+          fullName,
+          role,
+        }),
+      });
+      const result = await readJsonResponse(response);
+      if (!response.ok || !result.ok) {
+        const suffix = result.approved
+          ? " The profile was approved, but the approval email failed."
+          : "";
+        throw new Error(`${result.error || response.statusText}${suffix}`);
+      }
+
+      statusEl.textContent = result.emailSent
+        ? `Approved ${result.approvedEmail || user.email} as ${roleLabel(role)} and sent the approval email.`
+        : `Approved ${result.approvedEmail || user.email} as ${roleLabel(role)}. Email was skipped: ${result.emailSkippedReason || "email is not configured"}.`;
+      statusEl.className = "status-ok";
+      await loadPendingApprovals();
+    } catch (error) {
+      statusEl.textContent = `Approval failed: ${formatErrorMessage(error.message || error)}`;
+      statusEl.className = "status-error";
+    } finally {
+      setButtonLoading(button, false);
+    }
+  }
+
   async function refreshDacsSoon() {
     await loadDacs();
     setTimeout(loadDacs, 1500);
@@ -1012,6 +1217,7 @@
 
   el("logoutBtn")?.addEventListener("click", logout);
   el("refreshHealthBtn")?.addEventListener("click", loadSystemHealth);
+  el("refreshApprovalsBtn")?.addEventListener("click", loadPendingApprovals);
 
   el("deleteAllReportsBtn")?.addEventListener("click", (event) => {
     deleteAllReports(event.currentTarget);
