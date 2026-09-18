@@ -15,8 +15,8 @@ on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------
 -- weekly-reports bucket
--- Path convention: {year}/{month}/{person-slug}/{week_start}.docx
--- e.g. 2026/08/mabente-mophuting/2026-08-03.docx
+-- Path convention: {year}/{month}/{person-slug}/{week_start}-to-{week_end}-{unique}.docx
+-- e.g. 2026/08/mabente-mophuting/2026-08-03-to-2026-08-07-123456789-1-report.docx
 -- ---------------------------------------------------------------------
 
 -- Team leads/managers can upload into a folder that starts with their

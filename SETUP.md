@@ -188,7 +188,7 @@ To test it immediately without waiting for the 1st, just call the function manua
 
 ## 8. Test the whole pipeline end-to-end
 
-1. Log in as a team lead → upload a `.docx` weekly report with a `week_start` date.
+1. Log in as a team lead → choose the reporting month, set the Monday-Friday weekly start/end dates, and upload a `.docx` weekly report.
 2. Wait ~10–30 seconds, refresh — status should flip to "Parsed ✓". If it shows an error, check **Edge Functions → parse-report → Logs** in the dashboard.
 3. Log in as a manager → click **Generate DAC now**, optionally picking a specific month.
 4. After the DAC is generated, a new row should appear in the Generated DACs table with a **Download** link.
@@ -213,7 +213,7 @@ To test it immediately without waiting for the 1st, just call the function manua
 | Upload shows "Pending…" forever | Database Webhook not set up, or `parse-report` erroring | Check Edge Functions logs; check Webhook is enabled |
 | `parse-report` error: "download failed" | Storage RLS policy issue | Re-check `storage_policies.sql` ran successfully |
 | Generate DAC now → 403 | Logged-in user's profile role isn't `manager` | Fix their row in `public.profiles` |
-| Generate DAC → "No weekly reports found" | No reports with `week_start` in that month, or none parsed yet | Check `weekly_reports` table for that date range |
+| Generate DAC → "No weekly reports found" | No reports whose `week_start`/`week_end` range overlaps that month, or none parsed yet | Check `weekly_reports` table for that date range |
 | Generate DAC contains fewer details than expected | Weekly report tables were empty or did not match the expected template | Check the parsed `weekly_entries` rows and the uploaded report format |
 | docx looks broken / won't open | `npm:docx` version mismatch in Deno | Pin the exact version already specified (`docx@9.6.1`) |
 

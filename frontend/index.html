@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Falcorp DAC Portal</title>
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>Falcorp DAC Portal v2026-09-15</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root {
@@ -20,7 +23,7 @@
   header h1 { font-size: 1.1rem; margin: 0; }
   .brand { display: flex; align-items: center; gap: 0.75rem; }
   .brand-logo { width: 76px; height: auto; display: block; background: white; border-radius: 4px; padding: 0.2rem; }
-  main { width: 100%; max-width: 780px; flex: 1; margin: 2rem auto; padding: 0 1rem; }
+  main { width: 100%; max-width: 1080px; flex: 1; margin: 2rem auto; padding: 0 1rem; }
   .card { background: white; border: 1px solid var(--grey); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
   label { display: block; font-weight: 600; margin-bottom: 0.3rem; margin-top: 1rem; }
   input, select, button { font-size: 1rem; padding: 0.5rem; border-radius: 6px; border: 1px solid #ccc; width: 100%; }
@@ -58,6 +61,41 @@
   .file-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
   .table-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .table-actions button { white-space: nowrap; }
+  .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: end; }
+  .weekly-upload-grid { display: grid; gap: 0.75rem; margin-top: 1rem; }
+  .weekly-upload-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 0.6fr) minmax(230px, 1.15fr) minmax(210px, 1.05fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    border: 1px solid var(--grey);
+	    border-radius: 8px;
+	    padding: 0.85rem;
+	    background: #fbfdfe;
+	  }
+	  .weekly-upload-row input[type="file"] { min-width: 0; }
+  .week-label { font-weight: 700; color: #123f52; }
+  .week-range { display: block; margin-top: 0.2rem; color: #666; font-size: 0.84rem; font-weight: 500; }
+  .week-date-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+  .week-date-pair label { margin-top: 0; font-size: 0.78rem; color: #555; }
+  .week-date-pair input { width: 100%; }
+  .readiness-panel { margin-top: 1rem; padding: 1rem; border: 1px solid #cfe1e8; border-radius: 8px; background: #fbfdfe; }
+  .readiness-table-wrap { width: 100%; overflow-x: auto; }
+  .readiness-table th, .readiness-table td { white-space: nowrap; }
+  .readiness-table th:first-child, .readiness-table td:first-child { min-width: 180px; }
+  .readiness-status {
+    display: inline-block;
+    min-width: 4.8rem;
+    border-radius: 999px;
+    padding: 0.22rem 0.6rem;
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .readiness-missing { background: #f4f5f7; color: #5f6872; }
+  .readiness-saved { background: #fff7df; color: #8a5d00; }
+  .readiness-parsed { background: #eaf7ec; color: #146c2e; }
+  .readiness-error { background: #fff1f2; color: #b00020; }
   .footer-nav {
     position: fixed;
     left: 0;
@@ -104,6 +142,7 @@
     .footer-nav-inner { grid-template-columns: 1fr; }
     .footer-brand-block { flex-direction: column; }
     .footer-logo { width: 76px; }
+    .form-row, .weekly-upload-row { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -154,38 +193,42 @@
   <!-- TEAM LEAD VIEW -->
   <section id="teamLeadView" class="card hidden">
     <h2>Upload weekly reports</h2>
-    <label for="personName">Your name (as it should appear on the report)</label>
-    <input id="personName" type="text" placeholder="e.g. Boipelo Motshabi" />
-    <label for="weekStart">Month Start Date</label>
-    <input id="weekStart" type="date" />
-    <label for="reportFile">Weekly reports (.docx)</label>
-    <input id="reportFile" type="file" accept=".docx" multiple />
-    <button id="uploadBtn">Upload</button>
-    <p id="uploadStatus" class="muted"></p>
+    <div class="form-row">
+      <div>
+        <label for="personName">Your name (as it should appear on the report)</label>
+        <input id="personName" type="text" placeholder="e.g. Boipelo Motshabi" />
+      </div>
+      <div>
+        <label for="reportingMonth">Reporting month</label>
+        <input id="reportingMonth" type="month" />
+      </div>
+	    </div>
+	    <div id="weeklyUploadSlots" class="weekly-upload-grid" aria-live="polite"></div>
+	    <p id="uploadStatus" class="muted"></p>
+	  </section>
 
-    <h3>Your recent uploads</h3>
-    <table id="myUploadsTable">
-      <thead>
-        <tr>
-          <th>Month</th>
-          <th>Start</th>
-          <th>File</th>
-          <th>Status</th>
-          <th><span class="table-actions"><span>Delete</span><button id="deleteAllReportsBtn" class="danger" type="button">Delete all reports</button></span></th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <p id="deleteAllReportsStatus" class="muted"></p>
-  </section>
-
-  <section id="managerDacsView" class="card hidden">
-    <h2>Generate Delivery Acceptance Certificate (DAC)</h2>
-    <p class="muted">After all weekly reports for the month show Parsed, generate the monthly DAC and download it here.</p>
-    <label for="manualPeriod">Month</label>
-    <input id="manualPeriod" type="month" />
-    <label for="dacArea">Area</label>
-    <select id="dacArea">
+	  <section id="managerDacsView" class="card hidden">
+	    <h2>Generate Delivery Acceptance Certificate (DAC)</h2>
+	    <p class="muted">After all weekly reports for the month show Parsed, generate the monthly DAC and download it here.</p>
+	    <label for="manualPeriod">Month</label>
+	    <input id="manualPeriod" type="month" />
+	    <div id="managerReadinessPanel" class="readiness-panel hidden">
+	      <div class="health-toolbar">
+	        <div>
+	          <h3>Month readiness</h3>
+	          <p id="readinessSummary" class="muted">Select a month to review submissions.</p>
+	        </div>
+	        <button id="refreshReadinessBtn" class="secondary" type="button">Refresh readiness</button>
+	      </div>
+	      <div class="readiness-table-wrap">
+	        <table id="readinessTable" class="readiness-table">
+	          <thead></thead>
+	          <tbody></tbody>
+	        </table>
+	      </div>
+	    </div>
+	    <label for="dacArea">Area</label>
+	    <select id="dacArea">
       <option value="">Select the area for this DAC</option>
       <option value="ADBA DAC">ADBA DAC</option>
       <option value="DEV 2 DAC">DEV 2 DAC</option>
@@ -354,11 +397,17 @@
     delete button.dataset.originalText;
   }
 
-  function appendTextCell(row, text) {
-    const cell = document.createElement("td");
-    cell.textContent = text || "";
-    row.appendChild(cell);
-  }
+	  function appendTextCell(row, text) {
+	    const cell = document.createElement("td");
+	    cell.textContent = text || "";
+	    row.appendChild(cell);
+	  }
+
+	  function appendHeaderCell(row, text) {
+	    const cell = document.createElement("th");
+	    cell.textContent = text || "";
+	    row.appendChild(cell);
+	  }
 
   function appendStatusCell(row, report) {
     const cell = document.createElement("td");
@@ -417,6 +466,89 @@
     const date = new Date(`${dateString}T00:00:00`);
     return date.toLocaleString("en-US", { month: "long", year: "numeric" });
   }
+
+  function pad2(value) {
+    return String(value).padStart(2, "0");
+  }
+
+	  function isoDate(date) {
+	    return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+	  }
+
+	  function addDays(date, days) {
+	    const next = new Date(date);
+	    next.setUTCDate(next.getUTCDate() + days);
+	    return next;
+	  }
+
+  function monthInputValue(date = new Date()) {
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+  }
+
+  function selectedReportingMonth() {
+    return el("reportingMonth").value || monthInputValue();
+  }
+
+	  function getMonthlyWeekSlots(monthValue) {
+	    const [year, month] = monthValue.split("-").map(Number);
+	    if (!year || !month) return [];
+
+	    const firstDay = new Date(Date.UTC(year, month - 1, 1));
+	    const monthEnd = new Date(Date.UTC(year, month, 0));
+	    const day = firstDay.getUTCDay();
+	    const mondayOffset = day === 0 ? 1 : day === 6 ? 2 : -(day - 1);
+	    const firstMonday = addDays(firstDay, mondayOffset);
+
+	    const slots = [];
+	    for (let start = firstMonday, index = 0; start <= monthEnd; start = addDays(start, 7), index += 1) {
+	      const end = addDays(start, 4);
+	      const startDay = pad2(start.getUTCDate());
+	      const endDay = pad2(end.getUTCDate());
+	      slots.push({
+	        number: index + 1,
+	        start: isoDate(start),
+	        end: isoDate(end),
+	        label: `Week ${index + 1}`,
+	        folderLabel: `WEEK ${startDay} - ${endDay}`,
+	        rangeLabel: `${startDay} - ${endDay} ${start.toLocaleString("en-US", { month: "short", timeZone: "UTC" })}`,
+	      });
+	    }
+	    return slots;
+  }
+
+	  function displayWeekRange(weekStart) {
+	    const start = new Date(`${weekStart}T00:00:00Z`);
+	    return weekRangeLabel(weekStart, isoDate(addDays(start, 4)));
+	  }
+
+	  function weekRangeLabel(weekStart, weekEnd) {
+	    if (!weekStart) return "";
+	    const start = new Date(`${weekStart}T00:00:00Z`);
+	    const end = weekEnd ? new Date(`${weekEnd}T00:00:00Z`) : addDays(start, 4);
+	    return `WEEK ${pad2(start.getUTCDate())} - ${pad2(end.getUTCDate())}`;
+	  }
+
+	  function dateBelongsToMonth(dateValue, monthValue) {
+	    return Boolean(dateValue && monthValue && dateValue.startsWith(monthValue));
+	  }
+
+	  function dateRangeOverlapsMonth(startValue, endValue, monthValue) {
+	    if (!startValue || !endValue || !monthValue) return false;
+	    const [year, month] = monthValue.split("-").map(Number);
+	    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+	    const monthEnd = new Date(Date.UTC(year, month, 0));
+	    const start = new Date(`${startValue}T00:00:00Z`);
+	    const end = new Date(`${endValue}T00:00:00Z`);
+	    return start <= monthEnd && end >= monthStart;
+	  }
+
+	  function statusRank(status) {
+	    return { missing: 0, saved: 1, parsed: 2, error: 3 }[status] ?? 0;
+	  }
+
+	  function combineReadinessStatus(current, next) {
+	    return statusRank(next) > statusRank(current) ? next : current;
+	  }
 
   function appendDeleteCell(row, report) {
     const cell = document.createElement("td");
@@ -581,7 +713,10 @@
     list.className = "status-error";
     for (const failure of failures) {
       const item = document.createElement("li");
-      const parts = [failure.personName, failure.weekStart].filter(Boolean).join(" — ");
+      const weekRange = failure.weekStart && failure.weekEnd
+        ? `${failure.weekStart} to ${failure.weekEnd}`
+        : failure.weekStart;
+      const parts = [failure.personName, weekRange].filter(Boolean).join(" — ");
       const errorText = formatErrorMessage(failure.error || "still pending");
       item.textContent = `${parts || "Weekly report"}: ${errorText}`;
       list.appendChild(item);
@@ -694,8 +829,9 @@
   function showLogin() {
     el("loginView").classList.remove("hidden");
     el("teamLeadView").classList.add("hidden");
-    el("managerDacsView").classList.add("hidden");
-    el("managerApprovalView").classList.add("hidden");
+	    el("managerDacsView").classList.add("hidden");
+	    el("managerReadinessPanel").classList.add("hidden");
+	    el("managerApprovalView").classList.add("hidden");
     el("systemHealthView").classList.add("hidden");
     el("userBadge").textContent = "";
     currentProfile = null;
@@ -745,20 +881,27 @@
       el("loginView").classList.add("hidden");
 
       if (["team_lead", "manager"].includes(profile.role)) {
-        el("teamLeadView").classList.remove("hidden");
+        el("teamLeadView").classList.toggle("hidden", profile.role !== "team_lead");
         el("managerDacsView").classList.remove("hidden");
         el("systemHealthView").classList.remove("hidden");
         el("managerApprovalView").classList.toggle("hidden", profile.role !== "manager");
-        el("personName").value = profile.full_name;
-        await loadMyUploads();
+        if (!el("reportingMonth").value) el("reportingMonth").value = monthInputValue();
+        if (!el("manualPeriod").value) el("manualPeriod").value = el("reportingMonth").value;
+        el("managerReadinessPanel").classList.toggle("hidden", profile.role !== "manager");
+        if (profile.role === "team_lead") {
+          el("personName").value = profile.full_name;
+          await loadMyUploads();
+        }
         await loadDacs();
         if (profile.role === "manager") {
+          await loadManagerReadiness();
           await loadPendingApprovals();
         }
         await loadSystemHealth();
       } else {
         el("teamLeadView").classList.add("hidden");
         el("managerDacsView").classList.add("hidden");
+        el("managerReadinessPanel").classList.add("hidden");
         el("managerApprovalView").classList.add("hidden");
         el("systemHealthView").classList.add("hidden");
       }
@@ -878,15 +1021,103 @@
     }
   });
 
-  el("uploadBtn")?.addEventListener("click", async (event) => {
-    const button = event.currentTarget;
-    const personName = el("personName").value.trim();
-    const weekStart = el("weekStart").value;
-    const files = Array.from(el("reportFile").files || []);
-    const statusEl = el("uploadStatus");
+  function fileNameFromPath(storagePath) {
+    return storagePath?.split("/").pop() || "";
+  }
 
-    if (!personName || !weekStart || files.length === 0) {
-      statusEl.textContent = "Please fill in your name, week start, and choose at least one file.";
+  function reportsForSelectedMonth(reports) {
+    const month = selectedReportingMonth();
+    return (reports || []).filter((report) =>
+      dateRangeOverlapsMonth(report.week_start, report.week_end || report.week_start, month)
+    );
+  }
+
+	  function renderWeeklyUploadSlots() {
+	    const container = el("weeklyUploadSlots");
+	    if (!container) return;
+
+	    const selectedMonth = selectedReportingMonth();
+	    const slots = getMonthlyWeekSlots(selectedMonth);
+
+	    container.innerHTML = "";
+	    for (const slot of slots) {
+	      const row = document.createElement("div");
+	      row.className = "weekly-upload-row";
+
+	      const label = document.createElement("div");
+	      label.className = "week-label";
+	      label.textContent = slot.label;
+	      const range = document.createElement("span");
+	      range.className = "week-range";
+	      range.textContent = slot.folderLabel;
+	      label.appendChild(range);
+
+	      const dates = document.createElement("div");
+	      dates.className = "week-date-pair";
+
+	      const startWrap = document.createElement("div");
+	      const startLabel = document.createElement("label");
+	      startLabel.textContent = "Start";
+	      const startInput = document.createElement("input");
+	      startInput.type = "date";
+	      startInput.value = slot.start;
+	      startWrap.append(startLabel, startInput);
+
+	      const endWrap = document.createElement("div");
+	      const endLabel = document.createElement("label");
+	      endLabel.textContent = "End";
+	      const endInput = document.createElement("input");
+	      endInput.type = "date";
+	      endInput.value = slot.end;
+	      endWrap.append(endLabel, endInput);
+	      dates.append(startWrap, endWrap);
+
+	      startInput.addEventListener("change", () => {
+	        if (!startInput.value) return;
+	        const startDate = new Date(`${startInput.value}T00:00:00Z`);
+	        endInput.value = isoDate(addDays(startDate, 4));
+	        range.textContent = weekRangeLabel(startInput.value, endInput.value);
+	      });
+	      endInput.addEventListener("change", () => {
+	        range.textContent = weekRangeLabel(startInput.value, endInput.value);
+	      });
+
+	      const fileInput = document.createElement("input");
+	      fileInput.type = "file";
+	      fileInput.accept = ".docx";
+	      fileInput.multiple = true;
+	      fileInput.setAttribute("aria-label", `${slot.folderLabel} weekly reports`);
+
+	      const saveButton = document.createElement("button");
+	      saveButton.type = "button";
+	      saveButton.textContent = "Save";
+	      saveButton.addEventListener("click", () => saveWeeklyReportsForSlot(startInput.value, endInput.value, fileInput, saveButton));
+
+	      row.append(label, dates, fileInput, saveButton);
+	      container.appendChild(row);
+	    }
+	  }
+
+	  async function saveWeeklyReportsForSlot(weekStart, weekEnd, fileInput, button) {
+    const personName = el("personName").value.trim();
+    const files = Array.from(fileInput.files || []);
+    const statusEl = el("uploadStatus");
+    const selectedMonth = selectedReportingMonth();
+
+    if (!personName || !weekStart || !weekEnd || files.length === 0) {
+      statusEl.textContent = "Enter your name, choose the week start and end dates, and select one or more .docx reports.";
+      statusEl.className = "status-error";
+      return;
+    }
+
+	    if (!dateRangeOverlapsMonth(weekStart, weekEnd, selectedMonth)) {
+	      statusEl.textContent = "The selected week must overlap the reporting month.";
+	      statusEl.className = "status-error";
+	      return;
+	    }
+
+    if (weekEnd < weekStart) {
+      statusEl.textContent = "The week end date must be on or after the week start date.";
       statusEl.className = "status-error";
       return;
     }
@@ -898,14 +1129,13 @@
       return;
     }
 
-    statusEl.textContent = `Uploading 0 of ${files.length}…`;
-    statusEl.className = "muted";
-    setButtonLoading(button, true, "Uploading...");
+	    statusEl.textContent = `Saving 0 of ${files.length} reports...`;
+	    statusEl.className = "muted";
+	    setButtonLoading(button, true, "Saving...");
 
     try {
-      const year = weekStart.slice(0, 4);
-      const month = weekStart.slice(5, 7);
-      const slug = personName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+	      const [year, month] = selectedMonth.split("-");
+      const slug = personName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "team-lead";
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -914,17 +1144,16 @@
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)/g, "") || "weekly-report";
-        const uniquePart = `${Date.now()}-${i + 1}`;
-        const storagePath = `${year}/${month}/${slug}/${weekStart}-${uniquePart}-${safeName}.docx`;
+        const storagePath = `${year}/${month}/${slug}/${weekStart}-to-${weekEnd}-${Date.now()}-${i + 1}-${safeName}.docx`;
 
-        statusEl.textContent = `Uploading ${i + 1} of ${files.length}: ${file.name}`;
+        statusEl.textContent = `Saving ${i + 1} of ${files.length} reports...`;
 
         const { error: uploadError } = await supabaseClient.storage
           .from("weekly-reports")
           .upload(storagePath, file, { upsert: false });
 
         if (uploadError) {
-          statusEl.textContent = `Upload failed on ${file.name}: ${uploadError.message}`;
+          statusEl.textContent = `Could not save report ${i + 1} of ${files.length}: ${uploadError.message}`;
           statusEl.className = "status-error";
           return;
         }
@@ -933,12 +1162,13 @@
           uploaded_by: currentProfile.id,
           person_name: personName,
           week_start: weekStart,
+          week_end: weekEnd,
           project: "Telkom CSB",
           storage_path: storagePath,
         }).select("id").single();
 
         if (insertError) {
-          statusEl.textContent = `Saved ${file.name} but failed to record metadata: ${insertError.message}`;
+          statusEl.textContent = `Could not record report ${i + 1} of ${files.length}: ${insertError.message}`;
           statusEl.className = "status-error";
           return;
         }
@@ -948,42 +1178,179 @@
         }
       }
 
-      statusEl.textContent = `Uploaded ${files.length} weekly report${files.length === 1 ? "" : "s"}. They will be parsed automatically within a minute.`;
-      statusEl.className = "status-ok";
-      el("reportFile").value = "";
-      await loadMyUploads();
-    } finally {
+	      statusEl.textContent = `Saved ${files.length} report${files.length === 1 ? "" : "s"} for ${weekRangeLabel(weekStart, weekEnd)}.`;
+	      statusEl.className = "status-ok";
+	      fileInput.value = "";
+	      await loadMyUploads();
+	      if (currentProfile?.role === "manager") {
+	        await loadManagerReadiness();
+	      }
+	    } finally {
       setButtonLoading(button, false);
-    }
-  });
-
-  async function loadMyUploads(options = {}) {
-    const retryPending = options.retryPending !== false;
-    const { data, error } = await supabaseClient
-      .from("weekly_reports")
-      .select("id, week_start, storage_path, parsed, parse_error")
-      .eq("uploaded_by", currentProfile.id)
-      .order("week_start", { ascending: false });
-
-    const tbody = document.querySelector("#myUploadsTable tbody");
-    tbody.innerHTML = "";
-    if (error || !data) return;
-    for (const r of data) {
-      const tr = document.createElement("tr");
-      appendTextCell(tr, monthLabel(r.week_start));
-      appendTextCell(tr, r.week_start);
-      appendTextCell(tr, r.storage_path.split("/").pop());
-      appendStatusCell(tr, r);
-      appendDeleteCell(tr, r);
-      tbody.appendChild(tr);
-    }
-
-    if (retryPending) {
-      parsePendingReports(data);
     }
   }
 
-  async function loadDacs() {
+	  async function loadMyUploads(options = {}) {
+	    const retryPending = options.retryPending !== false;
+	    const { data, error } = await supabaseClient
+	      .from("weekly_reports")
+	      .select("id, week_start, week_end, storage_path, parsed, parse_error, person_name")
+	      .eq("uploaded_by", currentProfile.id)
+	      .order("week_start", { ascending: false });
+
+	    if (error || !data) {
+	      renderWeeklyUploadSlots();
+	      return;
+	    }
+	    renderWeeklyUploadSlots();
+
+	    if (retryPending) {
+	      parsePendingReports(data);
+	    }
+	  }
+
+	  function readinessBadge(status) {
+	    const span = document.createElement("span");
+	    span.className = `readiness-status readiness-${status}`;
+	    span.textContent = status;
+	    return span;
+	  }
+
+	  function reportReadinessStatus(report) {
+	    if (report.parse_error) return "error";
+	    if (report.parsed) return "parsed";
+	    return "saved";
+	  }
+
+	  function reportIsInSlot(report, slot) {
+	    const reportEnd = report.week_end || report.week_start;
+	    return report.week_start <= slot.end && reportEnd >= slot.start;
+	  }
+
+	  function renderReadinessEmpty(message) {
+	    const table = el("readinessTable");
+	    table.querySelector("thead").innerHTML = "";
+	    const tbody = table.querySelector("tbody");
+	    tbody.innerHTML = "";
+	    const row = document.createElement("tr");
+	    const cell = document.createElement("td");
+	    cell.className = "muted";
+	    cell.textContent = message;
+	    row.appendChild(cell);
+	    tbody.appendChild(row);
+	  }
+
+	  async function loadManagerReadiness() {
+	    if (currentProfile?.role !== "manager") return;
+	    const panel = el("managerReadinessPanel");
+	    const summaryEl = el("readinessSummary");
+	    const button = el("refreshReadinessBtn");
+	    panel.classList.remove("hidden");
+
+	    const monthValue = el("manualPeriod").value || selectedReportingMonth();
+	    if (!monthValue) {
+	      summaryEl.textContent = "Select a month to review submissions.";
+	      renderReadinessEmpty("No month selected.");
+	      return;
+	    }
+
+	    const slots = getMonthlyWeekSlots(monthValue);
+	    if (!slots.length) {
+	      summaryEl.textContent = "Could not build weekly readiness for this month.";
+	      renderReadinessEmpty("No weekly slots available.");
+	      return;
+	    }
+
+	    setButtonLoading(button, true, "Refreshing...");
+	    summaryEl.textContent = "Loading monthly readiness...";
+	    summaryEl.className = "muted";
+
+	    try {
+	      const { data: teamLeads, error: profilesError } = await supabaseClient
+	        .from("profiles")
+	        .select("id, full_name")
+	        .eq("role", "team_lead")
+	        .order("full_name", { ascending: true });
+
+	      if (profilesError) throw profilesError;
+
+	      const rangeStart = slots[0].start;
+	      const rangeEnd = slots[slots.length - 1].end;
+	      const { data: reports, error: reportsError } = await supabaseClient
+	        .from("weekly_reports")
+	        .select("uploaded_by, week_start, week_end, parsed, parse_error")
+	        .lte("week_start", rangeEnd)
+	        .gte("week_end", rangeStart);
+
+	      if (reportsError) throw reportsError;
+
+	      const table = el("readinessTable");
+	      const thead = table.querySelector("thead");
+	      const tbody = table.querySelector("tbody");
+	      thead.innerHTML = "";
+	      tbody.innerHTML = "";
+
+	      const headRow = document.createElement("tr");
+	      appendHeaderCell(headRow, "Team Lead");
+	      for (const slot of slots) {
+	        appendHeaderCell(headRow, slot.folderLabel);
+	      }
+	      thead.appendChild(headRow);
+
+	      const leads = teamLeads || [];
+	      if (!leads.length) {
+	        summaryEl.textContent = "No approved Team Leads found.";
+	        renderReadinessEmpty("No approved Team Leads found.");
+	        return;
+	      }
+
+	      let missingCells = 0;
+	      let errorCells = 0;
+	      let savedCells = 0;
+	      let parsedCells = 0;
+
+	      for (const lead of leads) {
+	        const row = document.createElement("tr");
+	        appendTextCell(row, lead.full_name || "Unnamed Team Lead");
+
+	        for (const slot of slots) {
+	          const matchingReports = (reports || []).filter((report) =>
+	            report.uploaded_by === lead.id && reportIsInSlot(report, slot)
+	          );
+	          let status = "missing";
+	          if (matchingReports.some((report) => report.parse_error)) {
+	            status = "error";
+	          } else if (matchingReports.some((report) => !report.parsed)) {
+	            status = "saved";
+	          } else if (matchingReports.length) {
+	            status = "parsed";
+	          }
+
+	          if (status === "missing") missingCells += 1;
+	          if (status === "error") errorCells += 1;
+	          if (status === "saved") savedCells += 1;
+	          if (status === "parsed") parsedCells += 1;
+
+	          const cell = document.createElement("td");
+	          cell.appendChild(readinessBadge(status));
+	          row.appendChild(cell);
+	        }
+
+	        tbody.appendChild(row);
+	      }
+
+	      summaryEl.textContent = `${monthLabel(`${monthValue}-01`)}: ${parsedCells} parsed, ${savedCells} saved, ${errorCells} error, ${missingCells} missing.`;
+	      summaryEl.className = errorCells ? "status-error" : missingCells ? "status-pending" : "status-ok";
+	    } catch (error) {
+	      summaryEl.textContent = `Could not load readiness: ${formatErrorMessage(error.message || error)}`;
+	      summaryEl.className = "status-error";
+	      renderReadinessEmpty("Readiness unavailable.");
+	    } finally {
+	      setButtonLoading(button, false);
+	    }
+	  }
+
+	  async function loadDacs() {
     const { data, error } = await supabaseClient
       .from("generated_dacs")
       .select("id, reporting_period, dac_area, description, generated_at, storage_path")
@@ -1215,9 +1582,17 @@
     }
   }
 
-  el("logoutBtn")?.addEventListener("click", logout);
-  el("refreshHealthBtn")?.addEventListener("click", loadSystemHealth);
-  el("refreshApprovalsBtn")?.addEventListener("click", loadPendingApprovals);
+	  el("logoutBtn")?.addEventListener("click", logout);
+	  el("refreshHealthBtn")?.addEventListener("click", loadSystemHealth);
+	  el("refreshApprovalsBtn")?.addEventListener("click", loadPendingApprovals);
+	  el("refreshReadinessBtn")?.addEventListener("click", loadManagerReadiness);
+	  el("reportingMonth")?.addEventListener("change", async () => {
+	    el("manualPeriod").value = el("reportingMonth").value;
+	    el("uploadStatus").textContent = "";
+	    await loadMyUploads();
+	    await loadManagerReadiness();
+	  });
+	  el("manualPeriod")?.addEventListener("change", loadManagerReadiness);
 
   el("deleteAllReportsBtn")?.addEventListener("click", (event) => {
     deleteAllReports(event.currentTarget);
@@ -1264,11 +1639,12 @@
       if (!json.ok) {
         const errorText = formatErrorMessage(json.error || json.message || res.statusText || "Unknown DAC generation error");
         statusEl.textContent = "Failed: " + errorText;
-        statusEl.className = "status-error";
-        showGenerateFailures(json, downloadEl);
-        await loadMyUploads();
-        return;
-      }
+	        statusEl.className = "status-error";
+	        showGenerateFailures(json, downloadEl);
+	        await loadMyUploads();
+	        await loadManagerReadiness();
+	        return;
+	      }
       statusEl.textContent = json.emailSent
         ? `Generated DAC for ${json.reportingPeriod} and emailed it to ${json.emailedTo || "the manager"}.`
         : `Generated DAC for ${json.reportingPeriod}. Email was skipped: ${json.emailSkippedReason || "email is not configured"}.`;
@@ -1286,8 +1662,9 @@
           description: json.dacArea || selectedArea,
           downloadUrl: json.downloadUrl,
         });
-      }
-      await refreshDacsSoon();
+	      }
+	      await refreshDacsSoon();
+	      await loadManagerReadiness();
     } catch (e) {
       statusEl.textContent = "Request failed. Check that the generate-dac function is deployed and allows browser requests.";
       statusEl.className = "status-error";

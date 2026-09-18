@@ -268,16 +268,16 @@ Deno.serve(async (req) => {
     const startStr = start.toISOString().slice(0, 10);
     const endStr = end.toISOString().slice(0, 10);
 
-    // 1. Pull all weekly reports whose week_start falls in this month,
+    // 1. Pull all weekly reports whose stored week range overlaps this month,
     //    joined with their parsed entries.
     const { data: reports, error: reportsError } = await supabase
       .from("weekly_reports")
       .select(`
-        id, uploaded_by, person_name, week_start, storage_path, parsed, parse_error,
+        id, uploaded_by, person_name, week_start, week_end, storage_path, parsed, parse_error,
         weekly_entries ( ${WEEKLY_ENTRY_COLUMNS} )
       `)
-      .gte("week_start", startStr)
       .lte("week_start", endStr)
+      .gte("week_end", startStr)
       .order("week_start", { ascending: true });
 
     if (reportsError) throw reportsError;
@@ -301,6 +301,7 @@ Deno.serve(async (req) => {
         parseFailures.push({
           personName: reportOwnerName(report, profileNamesById),
           weekStart: report.week_start,
+          weekEnd: report.week_end,
           error: parsedResult.error,
         });
       }
@@ -330,6 +331,7 @@ Deno.serve(async (req) => {
           pendingReports: pendingReports.map((r) => ({
             personName: reportOwnerName(r, profileNamesById),
             weekStart: r.week_start,
+            weekEnd: r.week_end,
           })),
         }),
         { status: 200, headers: corsHeaders },

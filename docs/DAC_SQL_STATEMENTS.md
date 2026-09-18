@@ -105,12 +105,23 @@ create table if not exists public.weekly_reports (
   uploaded_by uuid not null references public.profiles(id),
   person_name text not null,
   week_start date not null,
+  week_end date not null,
   project text,
   storage_path text not null,
   parsed boolean not null default false,
   parse_error text,
   created_at timestamptz not null default now()
 );
+
+alter table public.weekly_reports
+  add column if not exists week_end date;
+
+update public.weekly_reports
+set week_end = week_start + 4
+where week_end is null;
+
+alter table public.weekly_reports
+  alter column week_end set not null;
 
 alter table public.weekly_reports enable row level security;
 
@@ -201,8 +212,9 @@ create policy "managers and team leads can read generated dacs"
 -- ---------------------------------------------------------------------
 -- 5. Helpful index for the monthly generation job
 -- ---------------------------------------------------------------------
-create index weekly_reports_week_start_idx on public.weekly_reports (week_start);
-create index weekly_entries_report_id_idx on public.weekly_entries (weekly_report_id);
+create index if not exists weekly_reports_week_start_idx on public.weekly_reports (week_start);
+create index if not exists weekly_reports_week_end_idx on public.weekly_reports (week_end);
+create index if not exists weekly_entries_report_id_idx on public.weekly_entries (weekly_report_id);
 ```
 
 ## 2. Storage Buckets And Policies
@@ -399,6 +411,7 @@ select
   id,
   person_name,
   week_start,
+  week_end,
   storage_path,
   parsed,
   parse_error,
@@ -413,6 +426,7 @@ Check parsed entry sizes:
 select
   wr.person_name,
   wr.week_start,
+  wr.week_end,
   jsonb_array_length(coalesce(we.activities, '[]'::jsonb)) as activity_count,
   jsonb_array_length(coalesce(we.risks, '[]'::jsonb)) as risk_count,
   jsonb_array_length(coalesce(we.knowledge_transfer, '[]'::jsonb)) as knowledge_transfer_count,
