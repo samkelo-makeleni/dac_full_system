@@ -81,6 +81,10 @@
   .week-date-pair input { width: 100%; }
   .week-upload-status { font-size: 0.88rem; line-height: 1.35; color: #666; }
   .week-upload-status.has-reports { color: #146c2e; font-weight: 700; }
+  .week-upload-list { display: grid; gap: 0.35rem; margin-top: 0.45rem; }
+  .week-report-row { display: flex; align-items: center; gap: 0.45rem; min-width: 0; color: #333; font-weight: 500; }
+  .week-report-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .week-report-row button { width: auto; padding: 0.28rem 0.5rem; font-size: 0.78rem; flex: 0 0 auto; }
   .readiness-panel { margin-top: 1rem; padding: 1rem; border: 1px solid #cfe1e8; border-radius: 8px; background: #fbfdfe; }
   .readiness-table-wrap { width: 100%; overflow-x: auto; }
   .readiness-table th, .readiness-table td { white-space: nowrap; }
@@ -1047,9 +1051,38 @@
 	  }
 
 	  function setWeekUploadStatus(statusEl, reports, weekStart, weekEnd) {
-	    const uploadCount = reportsForSlot(reports, weekStart, weekEnd).length;
-	    statusEl.textContent = weekUploadStatusText(uploadCount);
+	    const slotReports = reportsForSlot(reports, weekStart, weekEnd);
+	    const uploadCount = slotReports.length;
+	    statusEl.innerHTML = "";
 	    statusEl.classList.toggle("has-reports", uploadCount > 0);
+
+	    const summary = document.createElement("div");
+	    summary.textContent = weekUploadStatusText(uploadCount);
+	    statusEl.appendChild(summary);
+
+	    if (!slotReports.length) return;
+
+	    const list = document.createElement("div");
+	    list.className = "week-upload-list";
+	    for (const report of slotReports) {
+	      const item = document.createElement("div");
+	      item.className = "week-report-row";
+
+	      const name = document.createElement("span");
+	      name.className = "week-report-name";
+	      name.title = fileNameFromPath(report.storage_path);
+	      name.textContent = fileNameFromPath(report.storage_path) || "Weekly report";
+
+	      const button = document.createElement("button");
+	      button.type = "button";
+	      button.className = "danger";
+	      button.textContent = "Delete";
+	      button.addEventListener("click", () => deleteReport(report, button));
+
+	      item.append(name, button);
+	      list.appendChild(item);
+	    }
+	    statusEl.appendChild(list);
 	  }
 
 	  function renderWeeklyUploadSlots(reports = []) {
