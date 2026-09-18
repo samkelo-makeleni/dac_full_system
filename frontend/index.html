@@ -81,10 +81,8 @@
   .week-date-pair input { width: 100%; }
   .week-upload-status { font-size: 0.88rem; line-height: 1.35; color: #666; }
   .week-upload-status.has-reports { color: #146c2e; font-weight: 700; }
-  .week-upload-list { display: grid; gap: 0.35rem; margin-top: 0.45rem; }
-  .week-report-row { display: flex; align-items: center; gap: 0.45rem; min-width: 0; color: #333; font-weight: 500; }
-  .week-report-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .week-report-row button { width: auto; padding: 0.28rem 0.5rem; font-size: 0.78rem; flex: 0 0 auto; }
+  .weekly-bulk-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: flex-end; margin-top: 1rem; }
+  .weekly-bulk-actions button { width: auto; }
   .readiness-panel { margin-top: 1rem; padding: 1rem; border: 1px solid #cfe1e8; border-radius: 8px; background: #fbfdfe; }
   .readiness-table-wrap { width: 100%; overflow-x: auto; }
   .readiness-table th, .readiness-table td { white-space: nowrap; }
@@ -210,7 +208,11 @@
       </div>
 	    </div>
 	    <div id="weeklyUploadSlots" class="weekly-upload-grid" aria-live="polite"></div>
+	    <div class="weekly-bulk-actions">
+	      <button id="deleteAllReportsBtn" class="danger" type="button">Delete all reports</button>
+	    </div>
 	    <p id="uploadStatus" class="muted"></p>
+	    <p id="deleteAllReportsStatus" class="muted"></p>
 	  </section>
 
 	  <section id="managerDacsView" class="card hidden">
@@ -600,11 +602,12 @@
     }
   }
 
-  async function deleteAllReports(button) {
-    if (!["team_lead", "manager"].includes(currentProfile?.role)) return;
-    const confirmed = confirm(
-      "Delete ALL weekly reports? This removes every uploaded report file and all parsed report data. Generated DACs will not be deleted."
-    );
+	  async function deleteAllReports(button) {
+	    if (!["team_lead", "manager"].includes(currentProfile?.role)) return;
+	    const targetLabel = currentProfile.role === "manager" ? "ALL weekly reports" : "all of your weekly reports";
+	    const confirmed = confirm(
+	      `Delete ${targetLabel}? This removes uploaded report files and parsed report data. Generated DACs will not be deleted.`
+	    );
     if (!confirmed) return;
 
     const statusEl = el("deleteAllReportsStatus");
@@ -636,7 +639,8 @@
         return;
       }
 
-      statusEl.textContent = `Deleted ${json.deletedReports || 0} weekly report${json.deletedReports === 1 ? "" : "s"}.`;
+	      const deletedCount = json.deletedReports || 0;
+	      statusEl.textContent = `Deleted ${deletedCount} weekly report${deletedCount === 1 ? "" : "s"}.`;
       statusEl.className = "status-ok";
       await loadMyUploads();
     } finally {
@@ -1051,38 +1055,9 @@
 	  }
 
 	  function setWeekUploadStatus(statusEl, reports, weekStart, weekEnd) {
-	    const slotReports = reportsForSlot(reports, weekStart, weekEnd);
-	    const uploadCount = slotReports.length;
-	    statusEl.innerHTML = "";
+	    const uploadCount = reportsForSlot(reports, weekStart, weekEnd).length;
+	    statusEl.textContent = weekUploadStatusText(uploadCount);
 	    statusEl.classList.toggle("has-reports", uploadCount > 0);
-
-	    const summary = document.createElement("div");
-	    summary.textContent = weekUploadStatusText(uploadCount);
-	    statusEl.appendChild(summary);
-
-	    if (!slotReports.length) return;
-
-	    const list = document.createElement("div");
-	    list.className = "week-upload-list";
-	    for (const report of slotReports) {
-	      const item = document.createElement("div");
-	      item.className = "week-report-row";
-
-	      const name = document.createElement("span");
-	      name.className = "week-report-name";
-	      name.title = fileNameFromPath(report.storage_path);
-	      name.textContent = fileNameFromPath(report.storage_path) || "Weekly report";
-
-	      const button = document.createElement("button");
-	      button.type = "button";
-	      button.className = "danger";
-	      button.textContent = "Delete";
-	      button.addEventListener("click", () => deleteReport(report, button));
-
-	      item.append(name, button);
-	      list.appendChild(item);
-	    }
-	    statusEl.appendChild(list);
 	  }
 
 	  function renderWeeklyUploadSlots(reports = []) {
@@ -1263,9 +1238,11 @@
 
 	    if (error || !data) {
 	      renderWeeklyUploadSlots();
+	      el("deleteAllReportsBtn").disabled = true;
 	      return;
 	    }
 	    renderWeeklyUploadSlots(data);
+	    el("deleteAllReportsBtn").disabled = data.length === 0;
 
 	    if (retryPending) {
 	      parsePendingReports(data);

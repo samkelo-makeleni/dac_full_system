@@ -1,5 +1,5 @@
-// Deletes all weekly reports and their stored DOCX files.
-// Approved users only.
+// Deletes weekly reports and their stored DOCX files.
+// Managers delete all reports; team leads delete only their own reports.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -43,9 +43,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: reports, error: reportsError } = await supabase
+    let reportsQuery = supabase
       .from("weekly_reports")
-      .select("id, storage_path");
+      .select("id, uploaded_by, storage_path");
+
+    if (profile.role === "team_lead") {
+      reportsQuery = reportsQuery.eq("uploaded_by", userData.user.id);
+    }
+
+    const { data: reports, error: reportsError } = await reportsQuery;
 
     if (reportsError) {
       return new Response(JSON.stringify({ ok: false, error: `Report lookup failed: ${reportsError.message}` }), {
