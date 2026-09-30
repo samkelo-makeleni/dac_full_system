@@ -7,7 +7,7 @@
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, ShadingType, AlignmentType, BorderStyle,
-  ImageRun, LevelFormat, VerticalAlign, Footer,
+  ImageRun, LevelFormat, VerticalAlign, Footer, HeadingLevel,
 } from "npm:docx@9.6.1";
 import { FALCORP_LOGO_BASE64 } from "./logo_base64.ts";
 
@@ -122,12 +122,21 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
 
   function h(text: string) {
     return new Paragraph({
+      heading: HeadingLevel.HEADING_2,
       spacing: { before: 260, after: 80 },
       children: [new TextRun({ text, bold: true, size: 22 })],
     });
   }
+  function leadHeading(text: string) {
+    return new Paragraph({
+      heading: HeadingLevel.HEADING_3,
+      spacing: { before: 220, after: 100 },
+      children: [new TextRun({ text, bold: true, size: 20 })],
+    });
+  }
   function bullet(boldLead: string, rest: string) {
     return new Paragraph({
+      style: "ListParagraph",
       numbering: { reference: "bullets", level: 0 },
       spacing: { after: 100 },
       children: [new TextRun({ text: boldLead + ": ", bold: true }), new TextRun({ text: rest })],
@@ -135,6 +144,7 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
   }
   function plainBullet(text: string) {
     return new Paragraph({
+      style: "ListParagraph",
       numbering: { reference: "bullets", level: 0 },
       spacing: { after: 100 },
       children: [new TextRun({ text })],
@@ -142,6 +152,21 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
   }
   function para(text: string) {
     return new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text })] });
+  }
+
+  function activityDetails(text: string) {
+    return String(text ?? "")
+      .split(/\n+|\s*;\s+/)
+      .map((item) => item.replace(/^[-•]\s*/, "").trim())
+      .filter(Boolean);
+  }
+
+  function activityGroup(item: any) {
+    const details = activityDetails(item.text);
+    return [
+      leadHeading(item.lead),
+      ...(details.length ? details : ["Delivery activity was recorded in the parsed weekly reports."]).map(plainBullet),
+    ];
   }
 
   function footerParas() {
@@ -183,7 +208,12 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
   const sectionRenderers = {
     paragraph: (s) => [h(s.title), para(s.text || "")],
     bulletsPlain: (s) => [h(s.title), ...(s.items || []).map((i: string) => plainBullet(i))],
-    bulletsLead: (s) => [h(s.title), ...(s.items || []).map((i: any) => bullet(i.lead, i.text))],
+    bulletsLead: (s) => [
+      h(s.title),
+      ...(s.title === "Project Activities"
+        ? (s.items || []).flatMap((i: any) => activityGroup(i))
+        : (s.items || []).map((i: any) => bullet(i.lead, i.text))),
+    ],
   };
 
   const indexItems = data.sections.map((s) => s.title);

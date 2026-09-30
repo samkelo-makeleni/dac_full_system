@@ -323,7 +323,7 @@ function buildPrompt(reportingPeriod: string, peopleData: PersonMonth[]) {
     "- Monthly Synopsis of Achievements: paragraph.",
     "- Project Delivery: bulletsPlain with Account / Client, Focus Areas, Reporting Period, and Delivery Team.",
     "- Project Summary: paragraph.",
-    "- Project Activities: bulletsLead grouped by delivery theme/project, not one bullet per raw row unless needed.",
+    "- Project Activities: bulletsLead grouped by delivery theme/project; each item.lead must be the project/theme heading and item.text must contain the individual delivered activities separated by semicolons, so they can render as separate detail bullets under the heading.",
     "- Remaining evidence sections: paragraph only if the whole team has no source rows; otherwise bulletsLead grouped by topic/theme.",
     "- Do not include a Weekly Report Analysis section.",
     "- Keep bullet text complete enough that a reviewer can see what was delivered, but avoid raw table dumping.",
