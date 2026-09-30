@@ -20,6 +20,17 @@ function assertTrue(value: boolean, message: string) {
   if (!value) throw new Error(message);
 }
 
+async function assertRejectsWith(fn: () => Promise<unknown>, expectedText: string, message: string) {
+  try {
+    await fn();
+  } catch (error) {
+    const text = String(error);
+    if (text.includes(expectedText)) return;
+    throw new Error(`${message}: expected error containing ${JSON.stringify(expectedText)}, got ${JSON.stringify(text)}`);
+  }
+  throw new Error(`${message}: expected promise to reject`);
+}
+
 function cell(text: string) {
   return new TableCell({
     children: [new Paragraph({ children: [new TextRun({ text })] })],
@@ -202,4 +213,13 @@ Deno.test("parseWeeklyReportBuffer treats activity Details as work performed", a
   );
   assertEquals(parsed.activities[0].notes, "Complete", "first status note");
   assertEquals(parsed.activities[1].work, "Built RICA and switch-to-Telkom screens", "second details activity");
+});
+
+Deno.test("parseWeeklyReportBuffer rejects invalid docx packages with a clear error", async () => {
+  const invalidBytes = new Uint8Array([0xB1, 0xC4, 0x3C, 0x07]);
+  await assertRejectsWith(
+    () => parseWeeklyReportBuffer(invalidBytes.buffer as ArrayBuffer, "bad-report.docx"),
+    "not a valid .docx package",
+    "invalid docx error",
+  );
 });

@@ -1136,6 +1136,15 @@
 	    }
 	  }
 
+  async function isValidDocxFile(file) {
+    const bytes = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    return bytes.length === 4 &&
+      bytes[0] === 0x50 &&
+      bytes[1] === 0x4B &&
+      bytes[2] === 0x03 &&
+      bytes[3] === 0x04;
+  }
+
 	  async function saveWeeklyReportsForSlot(weekStart, weekEnd, fileInput, button) {
     const personName = el("personName").value.trim();
     const files = Array.from(fileInput.files || []);
@@ -1165,6 +1174,16 @@
       statusEl.textContent = `Upload failed: ${invalidFile.name} is not a .docx file.`;
       statusEl.className = "status-error";
       return;
+    }
+
+    for (const file of files) {
+      if (!(await isValidDocxFile(file))) {
+        statusEl.textContent =
+          `Upload failed: ${file.name} is not a valid .docx Word document. ` +
+          "Open the report in Microsoft Word or LibreOffice, save/export it as Word Document (.docx), then upload it again.";
+        statusEl.className = "status-error";
+        return;
+      }
     }
 
 	    statusEl.textContent = `Saving 0 of ${files.length} reports...`;

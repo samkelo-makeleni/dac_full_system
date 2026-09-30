@@ -33,6 +33,26 @@ export interface ParsedWeeklyReport {
   aiEfficiency: string[][];
 }
 
+function validateDocxBuffer(buffer: ArrayBuffer, sourceFile: string) {
+  const bytes = new Uint8Array(buffer);
+  const signature = Array.from(bytes.slice(0, 4))
+    .map((byte) => byte.toString(16).padStart(2, "0").toUpperCase())
+    .join(" ");
+
+  if (
+    bytes.length < 4 ||
+    bytes[0] !== 0x50 ||
+    bytes[1] !== 0x4B ||
+    bytes[2] !== 0x03 ||
+    bytes[3] !== 0x04
+  ) {
+    throw new Error(
+      `Invalid DOCX file (${sourceFile}). The uploaded report is not a valid .docx package. ` +
+        `Please export/save the report as Word Document (.docx) and upload it again. Signature: ${signature || "empty file"}`,
+    );
+  }
+}
+
 function stripTags(s: string): string {
   return s
     .replace(/<[^>]+>/g, "")
@@ -416,6 +436,8 @@ export async function parseWeeklyReportBuffer(
   buffer: ArrayBuffer,
   sourceFile: string,
 ): Promise<ParsedWeeklyReport> {
+  validateDocxBuffer(buffer, sourceFile);
+
   const { value: html } = await mammoth.convertToHtml(
     { buffer: Buffer.from(buffer) },
     {
