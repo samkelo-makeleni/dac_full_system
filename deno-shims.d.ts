@@ -4,6 +4,7 @@ declare namespace Deno {
   };
 
   function serve(handler: (req: Request) => Promise<Response> | Response): void;
+  function test(name: string, fn: () => void | Promise<void>): void;
 }
 
 declare module "npm:*" {

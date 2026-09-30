@@ -38,6 +38,14 @@ function heading(text: string) {
   return new Paragraph({ text, heading: HeadingLevel.HEADING_1 });
 }
 
+async function packToArrayBuffer(doc: InstanceType<typeof Document>): Promise<ArrayBuffer> {
+  const bytes = await Packer.toBuffer(doc);
+  const view = new Uint8Array(bytes);
+  const copy = new Uint8Array(view.byteLength);
+  copy.set(view);
+  return copy.buffer as ArrayBuffer;
+}
+
 Deno.test("parseWeeklyReportBuffer extracts core weekly report sections", async () => {
   const doc = new Document({
     sections: [{
@@ -82,9 +90,7 @@ Deno.test("parseWeeklyReportBuffer extracts core weekly report sections", async 
     }],
   });
 
-  const bytes = await Packer.toBuffer(doc);
-  const buffer = new Uint8Array(bytes).buffer;
-  const parsed = await parseWeeklyReportBuffer(buffer, "fixture.docx");
+  const parsed = await parseWeeklyReportBuffer(await packToArrayBuffer(doc), "fixture.docx");
 
   assertEquals(parsed.name, "Samkelo Makeleni", "name");
   assertEquals(parsed.weekStart, "2026-08-03", "week start");
@@ -136,8 +142,7 @@ Deno.test("parseWeeklyReportBuffer extracts every project activity table in the 
     }],
   });
 
-  const bytes = await Packer.toBuffer(doc);
-  const parsed = await parseWeeklyReportBuffer(new Uint8Array(bytes).buffer, "multi-table.docx");
+  const parsed = await parseWeeklyReportBuffer(await packToArrayBuffer(doc), "multi-table.docx");
   const workItems = parsed.activities.map((activity) => activity.work);
 
   assertEquals(parsed.activities.length, 4, "activity count");
@@ -164,8 +169,7 @@ Deno.test("parseWeeklyReportBuffer extracts activities when the section title is
     }],
   });
 
-  const bytes = await Packer.toBuffer(doc);
-  const parsed = await parseWeeklyReportBuffer(new Uint8Array(bytes).buffer, "embedded-section.docx");
+  const parsed = await parseWeeklyReportBuffer(await packToArrayBuffer(doc), "embedded-section.docx");
   const workItems = parsed.activities.map((activity) => activity.work);
 
   assertEquals(parsed.activities.length, 2, "activity count");
@@ -188,8 +192,7 @@ Deno.test("parseWeeklyReportBuffer treats activity Details as work performed", a
     }],
   });
 
-  const bytes = await Packer.toBuffer(doc);
-  const parsed = await parseWeeklyReportBuffer(new Uint8Array(bytes).buffer, "details-column.docx");
+  const parsed = await parseWeeklyReportBuffer(await packToArrayBuffer(doc), "details-column.docx");
 
   assertEquals(parsed.activities.length, 2, "activity count");
   assertEquals(
