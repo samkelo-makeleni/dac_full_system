@@ -111,3 +111,92 @@ Deno.test("parseWeeklyReportBuffer extracts core weekly report sections", async 
     "expected AI efficiency row",
   );
 });
+
+Deno.test("parseWeeklyReportBuffer extracts every project activity table in the section", async () => {
+  const doc = new Document({
+    sections: [{
+      children: [
+        heading("Project Activities"),
+        table([
+          ["Day", "Project", "Hours", "Work", "Notes"],
+          ["Monday", "Billing", "4", "Reconciled failed charge events", "Done"],
+          ["", "Billing", "4", "Prepared deployment notes", "Ready"],
+        ]),
+        table([
+          ["Day", "Project", "Hours", "Work", "Notes"],
+          ["Tuesday", "Portal", "6", "Implemented manager approval fixes", "Merged"],
+          ["Wednesday", "Portal", "7", "Validated DAC generation evidence", "Complete"],
+        ]),
+        heading("Project Risks/Issues"),
+        table([
+          ["Risk", "Impact", "Action"],
+          ["None", "No delivery impact", "Monitor"],
+        ]),
+      ],
+    }],
+  });
+
+  const bytes = await Packer.toBuffer(doc);
+  const parsed = await parseWeeklyReportBuffer(new Uint8Array(bytes).buffer, "multi-table.docx");
+  const workItems = parsed.activities.map((activity) => activity.work);
+
+  assertEquals(parsed.activities.length, 4, "activity count");
+  assertTrue(workItems.includes("Reconciled failed charge events"), "first table first row");
+  assertTrue(workItems.includes("Prepared deployment notes"), "first table continuation row");
+  assertTrue(workItems.includes("Implemented manager approval fixes"), "second table first row");
+  assertTrue(workItems.includes("Validated DAC generation evidence"), "second table second row");
+});
+
+Deno.test("parseWeeklyReportBuffer extracts activities when the section title is inside a table", async () => {
+  const doc = new Document({
+    sections: [{
+      children: [
+        table([
+          ["Project Activities"],
+          ["Day", "Project", "Hours", "Work", "Notes"],
+          ["Thursday", "Workflow", "5", "Mapped approval notification path", "Reviewed"],
+          ["Friday", "Workflow", "3", "Closed parser extraction gaps", "Released"],
+          ["Project Risks/Issues"],
+          ["Risk", "Impact", "Action"],
+          ["Template drift", "Could drop rows", "Covered with parser tests"],
+        ]),
+      ],
+    }],
+  });
+
+  const bytes = await Packer.toBuffer(doc);
+  const parsed = await parseWeeklyReportBuffer(new Uint8Array(bytes).buffer, "embedded-section.docx");
+  const workItems = parsed.activities.map((activity) => activity.work);
+
+  assertEquals(parsed.activities.length, 2, "activity count");
+  assertTrue(workItems.includes("Mapped approval notification path"), "embedded title first activity");
+  assertTrue(workItems.includes("Closed parser extraction gaps"), "embedded title second activity");
+  assertTrue(!workItems.includes("Could drop rows"), "next section was not parsed as an activity");
+});
+
+Deno.test("parseWeeklyReportBuffer treats activity Details as work performed", async () => {
+  const doc = new Document({
+    sections: [{
+      children: [
+        heading("Project Activities"),
+        table([
+          ["Day", "Project", "Hours", "Details", "Status"],
+          ["Monday", "QR Portal OTP", "8", "Implemented OTP verification and response validation", "Complete"],
+          ["Tuesday", "Mobile Number Portability", "7", "Built RICA and switch-to-Telkom screens", "In review"],
+        ]),
+      ],
+    }],
+  });
+
+  const bytes = await Packer.toBuffer(doc);
+  const parsed = await parseWeeklyReportBuffer(new Uint8Array(bytes).buffer, "details-column.docx");
+
+  assertEquals(parsed.activities.length, 2, "activity count");
+  assertEquals(
+    parsed.activities[0].work,
+    "Implemented OTP verification and response validation",
+    "first details activity",
+  );
+  assertEquals(parsed.activities[0].notes, "Complete", "first status note");
+  assertEquals(parsed.activities[1].work, "Built RICA and switch-to-Telkom screens", "second details activity");
+});

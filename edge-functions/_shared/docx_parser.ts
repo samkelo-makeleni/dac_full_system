@@ -125,6 +125,10 @@ function isKnownSectionHeading(text: string): boolean {
   return headingMatches(text, KNOWN_SECTION_ALIASES);
 }
 
+function isProjectActivitiesHeading(text: string): boolean {
+  return headingMatches(text, new Set(sectionAliases("Project Activities").map(normalizeHeading)));
+}
+
 function extractSectionTables(html: string, headingText: string): string[] {
   // Weekly reports sometimes convert section titles to <p><strong>...</strong></p>
   // instead of headings. Walk block order and collect every table after a
@@ -231,30 +235,47 @@ function composePersonName(firstName: string | null, surname: string | null): st
 
 function parseActivities(html: string): Activity[] {
   const tables = extractSectionTables(html, "Project Activities");
-  const rows = tables.flatMap(parseRows);
-  const fallbackRows = rows.length ? rows : parseRows(findActivityTable(html));
+  const fallbackTables = tables.length ? tables : findActivityTables(html);
   const sectionTextRows = extractSectionContent(html, "Project Activities")
     .map((text) => ({ day: "", project: "General delivery", hours: "", work: text, notes: "" }))
     .filter((activity) => !isTemplateInstruction([activity.work]));
-  if (!fallbackRows.length) return uniqueActivities(sectionTextRows);
-  const header = fallbackRows[0].map(normalizeHeading);
-  const isHeaderRow = header.some((h) => h === "day" || h === "date") &&
-    header.some((h) => h.includes("project") || h.includes("activity") || h.includes("work"));
-  const dataRows = isHeaderRow ? fallbackRows.slice(1) : fallbackRows;
-
   const activities: Activity[] = [];
   let lastDay = "";
+  for (const table of fallbackTables) {
+    for (const parsed of parseActivityRows(parseRows(table), lastDay)) {
+      activities.push(parsed.activity);
+      lastDay = parsed.lastDay;
+    }
+  }
+  return uniqueActivities([...activities, ...sectionTextRows]);
+}
+
+function parseActivityRows(rows: string[][], initialLastDay = "") {
+  const headerIndex = rows.findIndex((row) => isActivityHeaderRow(row.map(normalizeHeading)));
+  const header = headerIndex >= 0 ? rows[headerIndex].map(normalizeHeading) : [];
+  const isHeaderRow = headerIndex >= 0;
+  const dataRows = isHeaderRow ? rows.slice(headerIndex + 1) : rows;
+  const activities: { activity: Activity; lastDay: string }[] = [];
+  let lastDay = initialLastDay;
+
   for (const r of dataRows) {
     let day: string, project: string, hours: string, work: string, notes: string, details: string[] = [];
+    const normalizedRow = r.map(normalizeHeading);
+    if (isActivityHeaderRow(normalizedRow)) continue;
+    if (normalizedRow.some(isProjectActivitiesHeading)) continue;
+    if (normalizedRow.some(isKnownSectionHeading)) break;
     if (isHeaderRow) {
       day = cellByHeader(r, header, ["day", "date"]) || lastDay;
       project = cellByHeader(r, header, ["project", "system", "application", "client"]) || "";
       hours = cellByHeader(r, header, ["hours", "hrs", "time"]) || "";
-      work = cellByHeader(r, header, ["work", "activity", "activities", "task", "description", "deliverable"]) || "";
+      work = cellByHeader(r, header, [
+        "work", "activity", "activities", "task", "description", "detail", "details", "deliverable",
+      ]) || "";
       notes = cellByHeader(r, header, ["notes", "comments", "status", "outcome"]) || "";
       details = extraCellsByHeader(r, header, [
         "day", "date", "project", "system", "application", "client", "hours", "hrs", "time",
-        "work", "activity", "activities", "task", "description", "deliverable", "notes", "comments", "status", "outcome",
+        "work", "activity", "activities", "task", "description", "detail", "details", "deliverable",
+        "notes", "comments", "status", "outcome",
       ]);
       lastDay = day || lastDay;
     } else if (r.length >= 5) {
@@ -284,9 +305,17 @@ function parseActivities(html: string): Activity[] {
     }
     if (isTemplateInstruction(r)) continue;
     if (!project && !work && !notes) continue; // blank Sat/Sun filler rows
-    activities.push({ day, project, hours, work, notes, ...(details.length ? { details } : {}) });
+    activities.push({
+      activity: { day, project, hours, work, notes, ...(details.length ? { details } : {}) },
+      lastDay,
+    });
   }
-  return uniqueActivities([...activities, ...sectionTextRows]);
+  return activities;
+}
+
+function isActivityHeaderRow(header: string[]) {
+  return header.some((h) => h === "day" || h === "date") &&
+    header.some((h) => h.includes("project") || h.includes("activity") || h.includes("work") || h.includes("task"));
 }
 
 function cellByHeader(row: string[], header: string[], aliases: string[]) {
@@ -305,18 +334,19 @@ function extraCellsByHeader(row: string[], header: string[], mappedAliases: stri
     .filter(Boolean);
 }
 
-function findActivityTable(html: string): string | null {
+function findActivityTables(html: string): string[] {
+  const tables: string[] = [];
   for (const table of allTables(html)) {
     const rows = parseRows(table);
     if (!rows.length) continue;
-    const header = rows[0].map(normalizeHeading);
-    const hasDay = header.some((h) => h === "day" || h === "date");
-    const hasDeliveryColumn = header.some((h) =>
-      h.includes("project") || h.includes("activity") || h.includes("work") || h.includes("task")
+    const hasProjectActivitiesTitle = rows.some((row) =>
+      row.some((cell) => isProjectActivitiesHeading(normalizeHeading(cell)))
     );
-    if (hasDay && hasDeliveryColumn) return table;
+    if (hasProjectActivitiesTitle || rows.some((row) => isActivityHeaderRow(row.map(normalizeHeading)))) {
+      tables.push(table);
+    }
   }
-  return null;
+  return tables;
 }
 
 function parseGenericTable(html: string, headingText: string): string[][] {
