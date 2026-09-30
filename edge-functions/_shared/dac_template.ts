@@ -123,22 +123,24 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
   function h(text: string) {
     return new Paragraph({
       heading: HeadingLevel.HEADING_2,
-      spacing: { before: 260, after: 80 },
-      children: [new TextRun({ text, bold: true, size: 22 })],
+      spacing: { before: 300, after: 100 },
+      keepNext: true,
+      children: [new TextRun({ text, bold: true, size: 24, color: TEAL })],
     });
   }
   function leadHeading(text: string) {
     return new Paragraph({
       heading: HeadingLevel.HEADING_3,
-      spacing: { before: 220, after: 100 },
-      children: [new TextRun({ text, bold: true, size: 20 })],
+      spacing: { before: 180, after: 60 },
+      keepNext: true,
+      children: [new TextRun({ text, bold: true, size: 20, color: TEAL })],
     });
   }
   function bullet(boldLead: string, rest: string) {
     return new Paragraph({
       style: "ListParagraph",
       numbering: { reference: "bullets", level: 0 },
-      spacing: { after: 100 },
+      spacing: { after: 70 },
       children: [new TextRun({ text: boldLead + ": ", bold: true }), new TextRun({ text: rest })],
     });
   }
@@ -146,7 +148,7 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
     return new Paragraph({
       style: "ListParagraph",
       numbering: { reference: "bullets", level: 0 },
-      spacing: { after: 100 },
+      spacing: { after: 60 },
       children: [new TextRun({ text })],
     });
   }
@@ -230,7 +232,7 @@ export async function buildDac(data: DacData): Promise<Uint8Array> {
         reference: "bullets",
         levels: [{
           level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 420, hanging: 260 } } },
+          style: { paragraph: { indent: { left: 360, hanging: 200 } } },
         }],
       }],
     },

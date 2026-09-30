@@ -211,14 +211,10 @@ function buildFallbackNarrative(reportingPeriod: string, peopleData: PersonMonth
 
     return projects.slice(0, 8).map((project) => {
       const related = activities.filter((activity) => (activity.project || "General delivery") === project);
-      const weeks = unique(related.map((activity) => activity.weekStart)).sort();
       const workItems = unique(related.map((activity) => activity.work)).slice(0, 8);
       return {
         lead: project,
-        text: [
-          weeks.length ? `Weeks: ${weeks.join(", ")}.` : "",
-          workItems.length ? workItems.join("; ") : "Delivery activity was recorded in the parsed weekly reports.",
-        ].filter(Boolean).join(" "),
+        text: workItems.length ? workItems.join("; ") : "Delivery activity was recorded in the parsed weekly reports.",
       };
     });
   }
