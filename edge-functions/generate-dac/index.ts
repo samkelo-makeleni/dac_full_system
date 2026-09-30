@@ -68,6 +68,16 @@ function serializeError(value: unknown): string {
   return String(value ?? "Unknown error");
 }
 
+function normalizeParseError(value: unknown, sourceFile?: string): string {
+  const message = serializeError(value);
+  if (/corrupted zip|unexpected signature|expected \\x50\\x4b\\x03\\x04/i.test(message)) {
+    const source = sourceFile ? ` (${sourceFile})` : "";
+    return `Invalid DOCX file${source}. The uploaded report is not a valid .docx package. ` +
+      "Please open the report in Microsoft Word or LibreOffice, save/export it as Word Document (.docx), upload it again, and delete the failed upload.";
+  }
+  return message;
+}
+
 async function loadProfileNamesById(supabase: any, userIds: string[]) {
   const ids = uniqueStrings(userIds);
   if (ids.length === 0) return new Map<string, string>();
@@ -184,7 +194,7 @@ async function ensureReportParsed(supabase: any, report: any, forceReparse = fal
     report.weekly_entries = [savedEntry ?? entry];
     return { ok: true, entry: savedEntry ?? entry };
   } catch (err) {
-    const message = String(err);
+    const message = normalizeParseError(err, report.storage_path);
     await supabase.from("weekly_reports").update({ parse_error: message }).eq("id", report.id);
     return { ok: false, error: message };
   }

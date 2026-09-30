@@ -23,6 +23,16 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+function normalizeParseError(value: unknown, sourceFile?: string): string {
+  const message = String(value ?? "Unknown error");
+  if (/corrupted zip|unexpected signature|expected \\x50\\x4b\\x03\\x04/i.test(message)) {
+    const source = sourceFile ? ` (${sourceFile})` : "";
+    return `Invalid DOCX file${source}. The uploaded report is not a valid .docx package. ` +
+      "Please open the report in Microsoft Word or LibreOffice, save/export it as Word Document (.docx), upload it again, and delete the failed upload.";
+  }
+  return message;
+}
+
 async function getAuthorizedReport(supabase: any, bearerToken: string, reportId: string) {
   const { data: userData, error: userError } = await supabase.auth.getUser(bearerToken);
   if (userError || !userData?.user) {
@@ -71,7 +81,17 @@ async function parseAndStoreReport(supabase: any, record: any) {
     return { ok: false, error: "download failed" };
   }
 
-  const parsed = await parseWeeklyReportBuffer(await fileData.arrayBuffer(), record.storage_path);
+  let parsed;
+  try {
+    parsed = await parseWeeklyReportBuffer(await fileData.arrayBuffer(), record.storage_path);
+  } catch (err) {
+    const message = normalizeParseError(err, record.storage_path);
+    await supabase
+      .from("weekly_reports")
+      .update({ parse_error: message })
+      .eq("id", record.id);
+    return { ok: false, error: message };
+  }
   const entry = {
     activities: parsed.activities,
     risks: parsed.risks,
